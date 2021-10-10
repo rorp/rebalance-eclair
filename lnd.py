@@ -56,6 +56,18 @@ class Lnd:
         )
         return combined_credentials
 
+    def parse_channel_id(self, id_string):
+        if not id_string:
+            return None
+        arr = None
+        if ":" in id_string:
+            arr = id_string.rstrip().split(":")
+        elif "x" in id_string:
+            arr = id_string.rstrip().split("x")
+        if arr:
+            return (int(arr[0]) << 40) + (int(arr[1]) << 16) + int(arr[2])
+        return int(id_string)
+
     @lru_cache(maxsize=None)
     def get_info(self):
         return self.stub.GetInfo(ln.GetInfoRequest())
@@ -105,21 +117,25 @@ class Lnd:
 
     def get_route(
         self,
-        pub_key,
+        first_hop_channel,
+        last_hop_channel,
         amount,
         ignored_pairs,
         ignored_nodes,
-        first_hop_channel_id,
         fee_limit_msat,
     ):
+        if first_hop_channel:
+            first_hop_channel_id = first_hop_channel.chan_id
+        else:
+            first_hop_channel_id = None
+        if last_hop_channel:
+            last_hop_pubkey = base64.b16decode(last_hop_channel.remote_pubkey, True)
+        else:
+            last_hop_pubkey = None
         if fee_limit_msat:
             fee_limit = {"fixed_msat": int(fee_limit_msat)}
         else:
             fee_limit = None
-        if pub_key:
-            last_hop_pubkey = base64.b16decode(pub_key, True)
-        else:
-            last_hop_pubkey = None
         request = ln.QueryRoutesRequest(
             pub_key=self.get_own_pubkey(),
             last_hop_pubkey=last_hop_pubkey,

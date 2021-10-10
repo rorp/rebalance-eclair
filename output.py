@@ -1,6 +1,7 @@
 import sys
 
 from yachalk import chalk
+from lnd import Lnd
 
 
 class Output:
@@ -37,11 +38,17 @@ class Output:
         if hops[0] == next_hop:
             ppm = self.lnd.get_ppm_to(next_hop.chan_id)
             return f"(free, we usually charge {format_ppm(ppm)})"
-        hop = hops[hops.index(next_hop) - 1]
+        if self.is_lnd():
+            hop = hops[hops.index(next_hop) - 1]
+        else:
+            hop = hops[hops.index(next_hop)]
         ppm = int(hop.fee_msat * 1_000_000 / hop.amt_to_forward_msat)
         fee_formatted = "fee " + chalk.cyan(f"{hop.fee_msat:8,} mSAT")
         ppm_formatted = format_ppm(ppm, 5)
         return f"({fee_formatted}, {ppm_formatted})"
+
+    def is_lnd(self):
+        return isinstance(self.lnd, Lnd)
 
 
 def format_alias(alias):

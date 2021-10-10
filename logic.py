@@ -4,6 +4,7 @@ import output
 from output import Output, format_alias, format_fee_msat, format_ppm, format_amount, \
     format_warning, format_error, format_earning, format_fee_msat_red, format_fee_msat_white, format_channel_id
 from routes import Routes
+from lnd import Lnd
 
 DEFAULT_BASE_FEE_SAT_MSAT = 1_000
 DEFAULT_FEE_RATE_MSAT = 0.001
@@ -215,6 +216,9 @@ class Logic:
         elif code == 13:
             self.output.print_line(format_warning("Incorrect CLTV expiry"))
             routes.ignore_edge_on_route(failure_source_pubkey, route)
+        elif code == -1:
+            self.output.print_line(format_warning(response.failure.error_message()))
+            routes.ignore_edge_on_route(failure_source_pubkey, route)
         else:
             self.output.print_line(format_error(f"Unknown error code {repr(code)}:"))
             self.output.print_line(format_error(repr(response)))
@@ -257,6 +261,8 @@ class Logic:
     def low_outbound_liquidity_after_sending(self, first_hop, total_amount):
         if self.first_hop_channel:
             # Just use the computed/specified amount to drain the first hop, ignoring fees
+            return False
+        if not self.is_lnd() and self.last_hop_channel and self.last_hop_channel.chan_id == first_hop.chan_id:
             return False
         channel_id = first_hop.chan_id
         channel = self.get_channel_for_channel_id(channel_id)
@@ -374,24 +380,25 @@ class Logic:
                 self.ignore_cheap_channels_for_last_hop(min_fee_last_hop, routes)
             if not self.last_hop_channel and not self.reckless:
                 self.ignore_last_hops_with_low_inbound(routes)
-
-            # avoid me - X - me via the same channel/peer
-            chan_id = self.first_hop_channel.chan_id
-            from_pub_key = self.first_hop_channel.remote_pubkey
-            to_pub_key = self.lnd.get_own_pubkey()
-            routes.ignore_edge_from_to(
-                chan_id, from_pub_key, to_pub_key, show_message=False
-            )
+            if self.is_lnd():
+                # avoid me - X - me via the same channel/peer
+                chan_id = self.first_hop_channel.chan_id
+                from_pub_key = self.first_hop_channel.remote_pubkey
+                to_pub_key = self.lnd.get_own_pubkey()
+                routes.ignore_edge_from_to(
+                    chan_id, from_pub_key, to_pub_key, show_message=False
+                )
         if self.last_hop_channel:
             if not self.reckless:
                 self.ignore_first_hops_with_fee_rate_higher_than_last_hop(routes)
-            # avoid me - X - me via the same channel/peer
-            chan_id = self.last_hop_channel.chan_id
-            from_pub_key = self.lnd.get_own_pubkey()
-            to_pub_key = self.last_hop_channel.remote_pubkey
-            routes.ignore_edge_from_to(
-                chan_id, from_pub_key, to_pub_key, show_message=False
-            )
+            if self.is_lnd():
+                # avoid me - X - me via the same channel/peer
+                chan_id = self.last_hop_channel.chan_id
+                from_pub_key = self.lnd.get_own_pubkey()
+                to_pub_key = self.last_hop_channel.remote_pubkey
+                routes.ignore_edge_from_to(
+                    chan_id, from_pub_key, to_pub_key, show_message=False
+                )
         if self.last_hop_channel and fee_limit_msat and not self.reckless:
             # ignore first hops with high fee rate configured by our node (causing high missed future fees)
             max_fee_rate_first_hop = math.ceil(fee_limit_msat * 1_000 / self.amount)
@@ -435,3 +442,6 @@ class Logic:
                 routes.ignore_edge_from_to(
                     channel_id, channel.remote_pubkey, to_pub_key, show_message=False
                 )
+
+    def is_lnd(self):
+        return isinstance(self.lnd, Lnd)

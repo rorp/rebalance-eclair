@@ -1,4 +1,5 @@
 import base64
+from lnd import Lnd
 
 MAX_ROUTES_TO_REQUEST = 100
 
@@ -11,13 +12,13 @@ class Routes:
     ignored_nodes = []
 
     def __init__(
-        self,
-        lnd,
-        payment_request,
-        first_hop_channel,
-        last_hop_channel,
-        fee_limit_msat,
-        output
+            self,
+            lnd,
+            payment_request,
+            first_hop_channel,
+            last_hop_channel,
+            fee_limit_msat,
+            output
     ):
         self.lnd = lnd
         self.payment_request = payment_request
@@ -48,20 +49,12 @@ class Routes:
 
     def request_route(self):
         amount = self.get_amount()
-        if self.last_hop_channel:
-            last_hop_pubkey = self.last_hop_channel.remote_pubkey
-        else:
-            last_hop_pubkey = None
-        if self.first_hop_channel:
-            first_hop_channel_id = self.first_hop_channel.chan_id
-        else:
-            first_hop_channel_id = None
         routes = self.lnd.get_route(
-            last_hop_pubkey,
+            self.first_hop_channel,
+            self.last_hop_channel,
             amount,
             self.ignored_pairs,
             self.ignored_nodes,
-            first_hop_channel_id,
             self.fee_limit_msat,
         )
         if routes is None:
@@ -123,7 +116,10 @@ class Routes:
             if missed_fee_first_hop_msat > max_fee_msat and not self.first_hop_channel:
                 ignore.append(first_hop)
             else:
-                hop_to_ignore = hops[hops.index(max_fee_hop) + 1]
+                if self.is_lnd():
+                    hop_to_ignore = hops[hops.index(max_fee_hop) + 1]
+                else:
+                    hop_to_ignore = hops[hops.index(max_fee_hop)]
                 ignore.append(hop_to_ignore)
         for hop in ignore:
             self.ignore_hop_on_route(hop, route)
@@ -134,13 +130,21 @@ class Routes:
         self.ignore_edge_from_to(chan_id, edge.node2_pub, edge.node1_pub)
 
     def ignore_edge_from_to(self, chan_id, from_pubkey, to_pubkey, show_message=True):
-        pair = {
-            "from": base64.b16decode(from_pubkey, True),
-            "to": base64.b16decode(to_pubkey, True),
-        }
+        if self.is_lnd():
+            pair = {
+                "from": base64.b16decode(from_pubkey, True),
+                "to": base64.b16decode(to_pubkey, True),
+            }
+        else:
+            pair = {
+                "chan_id": chan_id,
+            }
         if pair in self.ignored_pairs:
             return
         if show_message:
             self.output.print_line(
                 f"Ignoring {self.output.get_channel_representation(chan_id, to_pubkey, from_pubkey)}")
         self.ignored_pairs.append(pair)
+
+    def is_lnd(self):
+        return isinstance(self.lnd, Lnd)

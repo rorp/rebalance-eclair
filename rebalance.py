@@ -5,20 +5,27 @@ import os
 import platform
 import random
 import sys
+from os.path import expanduser
 
 from yachalk import chalk
 
+from eclair import Eclair
 from lnd import Lnd
 from logic import Logic
 from output import Output, format_alias, format_ppm, format_amount, format_amount_green, format_boring_string, \
     print_bar, format_channel_id, format_error
+from pyhocon import ConfigFactory
 
 MAX_SATOSHIS_PER_TRANSACTION = 4294967
 
 
 class Rebalance:
     def __init__(self, arguments):
-        self.lnd = Lnd(arguments.lnddir, arguments.grpc, arguments.network)
+        eclair_conf = read_eclair_config(arguments.eclairdir)
+        if eclair_conf or arguments.eclairapi:
+            self.lnd = Eclair(eclair_conf, arguments.eclairapi, arguments.eclairpassword)
+        else:
+            self.lnd = Lnd(arguments.lnddir, arguments.grpc, arguments.network)
         self.output = Output(self.lnd)
         self.min_amount = arguments.min_amount
         self.arguments = arguments
@@ -29,18 +36,8 @@ class Rebalance:
         self.min_local = arguments.min_local
         self.min_remote = arguments.min_remote
 
-    @staticmethod
-    def parse_channel_id(id_string):
-        if not id_string:
-            return None
-        arr = None
-        if ":" in id_string:
-            arr = id_string.rstrip().split(":")
-        elif "x" in id_string:
-            arr = id_string.rstrip().split("x")
-        if arr:
-            return (int(arr[0]) << 40) + (int(arr[1]) << 16) + int(arr[2])
-        return int(id_string)
+    def parse_channel_id(self,id_string):
+        return self.lnd.parse_channel_id(id_string)
 
     def get_sort_key(self, channel):
         rebalance_amount = self.get_rebalance_amount(channel)
@@ -220,12 +217,12 @@ class Rebalance:
                 self.list_channels(reverse=True)
             sys.exit(0)
 
-        if self.first_hop_channel_id == -1:
+        if self.first_hop_channel_id == -1 or self.first_hop_channel_id == '-1':
             self.first_hop_channel = random.choice(self.get_first_hop_candidates())
         else:
             self.first_hop_channel = self.get_channel_for_channel_id(self.first_hop_channel_id)
 
-        if self.last_hop_channel_id == -1:
+        if self.last_hop_channel_id == -1 or self.last_hop_channel_id == '-1':
             self.last_hop_channel = random.choice(self.get_last_hop_candidates())
         else:
             self.last_hop_channel = self.get_channel_for_channel_id(self.last_hop_channel_id)
@@ -345,6 +342,22 @@ def get_argument_parser():
         default="localhost:10009",
         dest="grpc",
         help="(default localhost:10009) lnd gRPC endpoint",
+    )
+    parser.add_argument(
+        "--eclairdir",
+        default="~/.eclair",
+        dest="eclairdir",
+        help="(default ~/.eclair) Eclair directory",
+    )
+    parser.add_argument(
+        "--eclairapi",
+        dest="eclairapi",
+        help="Eclair API address",
+    )
+    parser.add_argument(
+        "--eclairpassword",
+        dest="eclairpassword",
+        help="Eclair API password",
     )
     list_group = parser.add_argument_group(
         "list candidates", "Show the unbalanced channels."
@@ -535,6 +548,15 @@ def get_columns():
         return int(os.popen("stty size", "r").read().split()[1])
     else:
         return 80
+
+
+def read_eclair_config(dir):
+    dir = expanduser(dir)
+    file = f"{dir}/eclair.conf"
+    if os.path.exists(file):
+        return ConfigFactory.parse_file(file)
+    else:
+        return None
 
 
 success = main()

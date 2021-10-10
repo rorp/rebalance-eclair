@@ -1,6 +1,8 @@
-# rebalance-lnd
+# rebalance-eclair
 
-Using this script you can easily rebalance individual channels of your `lnd` node by
+This is an adaptation of https://github.com/C-Otto/rebalance-lnd for `Eclair`.
+
+Using this script you can easily rebalance individual channels of your `lnd` of `Eclair` node by
 sending funds out one channel, through the lightning network, back to yourself.
 
 This script helps you move funds between your channels so that you can increase the outbound liquidity in one channel,
@@ -27,18 +29,23 @@ By default, this script connects to `localhost:10009`, using the macaroon file i
 If this does not help, it also tries to find the file in `~/umbrel/lnd/data/chain/bitcoin/mainnet/admin.macaroon`.
 If you need to change this, please have a look at the optional arguments `--grpc` and `--lnddir`.
 
+### Eclair
+
+This script needs an active `Eclair` (tested with v0.6.3, https://github.com/ACINQ/eclair) instance running.
+
+To allow the script to connect to your `Eclair` instance use `--eclairapi`   and `--eclairpassword` arguments.
+Alternatively, You need read permissions for the `Eclair` config file to read the API address and the API password from 
+the config file (by default `~/.eclair/ecalir.conf`, the path can be changed with optional argument `--eclairdir`).
+
 ### rebalance-lnd itself
 
 You need to download the files that are part of this project, for example using [git](https://git-scm.com/):
 
 ```
 cd /some/where/
-git clone https://github.com/C-Otto/rebalance-lnd.git
-cd rebalance-lnd/
+git clone https://github.com/rorp/rebalance-eclair.git
+cd rebalance-eclair/
 ```
-
-Alternatively, you may also download the files in a ZIP file offered by GitHub:
-https://github.com/C-Otto/rebalance-lnd/archive/refs/heads/main.zip
 
 ### Python Dependencies
 
@@ -277,6 +284,12 @@ optional arguments:
   --network NETWORK     (default mainnet) lnd network (mainnet, testnet,
                         simnet, ...)
   --grpc GRPC           (default localhost:10009) lnd gRPC endpoint
+  --eclairdir ECLAIRDIR
+                        (default ~/.eclair) Eclair directory
+  --eclairapi ECLAIRAPI
+                        Eclair API address
+  --eclairpassword ECLAIRPASSWORD
+                        Eclair API password
 
 list candidates:
   Show the unbalanced channels.
@@ -358,15 +371,4 @@ rebalance:
 ## Contributing
 
 Contributions are highly welcome!
-Feel free to submit issues and pull requests on https://github.com/C-Otto/rebalance-lnd/
-
-You can also send donations via keysend.
-For example, to send 500 satoshis to C-Otto with a message "Thank you for rebalance-lnd":
-```
-lncli sendpayment --amt=500 --data 7629168=5468616e6b20796f7520666f7220726562616c616e63652d6c6e64 --keysend --dest=027ce055380348d7812d2ae7745701c9f93e70c1adeb2657f053f91df4f2843c71
-```
-
-You can also specify an arbitrary message:
-```
-lncli sendpayment --amt=500 --data 7629168=$(echo -n "your message here" | xxd -pu -c 10000) --keysend --dest=027ce055380348d7812d2ae7745701c9f93e70c1adeb2657f053f91df4f2843c71
-```
+Feel free to submit issues and pull requests on https://github.com/rorp/rebalance-eclair/
