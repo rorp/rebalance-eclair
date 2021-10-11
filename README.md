@@ -37,7 +37,7 @@ To allow the script to connect to your `Eclair` instance use `--eclairapi`   and
 Alternatively, You need read permissions for the `Eclair` config file to read the API address and the API password from 
 the config file (by default `~/.eclair/ecalir.conf`, the path can be changed with optional argument `--eclairdir`).
 
-### rebalance-lnd itself
+### rebalance-eclair itself
 
 You need to download the files that are part of this project, for example using [git](https://git-scm.com/):
 
