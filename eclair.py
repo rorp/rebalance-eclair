@@ -140,7 +140,7 @@ class Eclair:
             self.address = address
             self.password = password
         else:
-            port = conf.get_string('eclair.api.port') or '8080'
+            port = conf.get_string('eclair.api.port', '8080')
             self.address = f"localhost:{port}"
             self.password = conf.get_string('eclair.api.password')
 
