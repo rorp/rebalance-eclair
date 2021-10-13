@@ -89,6 +89,7 @@ class Channel:
         else:
             self.node1_pub = self.remote_pubkey
             self.node2_pub = self.local_pubkey
+        self.channel_update = channel_update
 
     def __repr__(self):
         return f"{self.chan_id}:{self.node1_pub}:{self.node2_pub}"
@@ -176,13 +177,17 @@ class Eclair:
 
     @lru_cache(maxsize=None)
     def get_all_updates(self, pub_key):
-        return self.call_eclair("allupdates", {'nodeId': pub_key})
+        res = self.call_eclair("allupdates", {'nodeId': pub_key})
+        return res
 
     def get_channel_update(self, pub_key, channel_id):
-        for update in self.get_all_updates(pub_key):
-            if update['shortChannelId'] == channel_id:
-                return update
-        return None
+        if pub_key == self.get_own_pubkey():
+            return self.get_channel(channel_id).channel_update
+        else:
+            for update in self.get_all_updates(pub_key):
+                if update['shortChannelId'] == channel_id:
+                    return update
+            return None
 
     def generate_invoice(self, memo, amount):
         params = {
@@ -231,8 +236,14 @@ class Eclair:
         channel = self.get_channel(channel_id)
         if channel is None:
             return None
-        node1_policy = RoutingPolicy(self.get_channel_update(channel.node1_pub, channel.chan_id))
-        node2_policy = RoutingPolicy(self.get_channel_update(channel.node2_pub, channel.chan_id))
+        node1_policy = None
+        channel_update1 = self.get_channel_update(channel.node1_pub, channel.chan_id)
+        if channel_update1:
+            node1_policy = RoutingPolicy(channel_update1)
+        node2_policy = None
+        channel_update2 = self.get_channel_update(channel.node2_pub, channel.chan_id)
+        if channel_update2:
+            node2_policy = RoutingPolicy(channel_update2)
         return Edge(channel.chan_id, channel.node1_pub, channel.node2_pub, node1_policy, node2_policy)
 
     def get_policy_to(self, channel_id):
@@ -253,7 +264,10 @@ class Eclair:
         return self.get_policy_to(channel_id).fee_rate_milli_msat
 
     def get_ppm_from(self, channel_id):
-        return self.get_policy_from(channel_id).fee_rate_milli_msat
+        policy = self.get_policy_from(channel_id)
+        if policy:
+            return policy.fee_rate_milli_msat
+        return None
 
     @lru_cache(maxsize=None)
     def get_max_channel_capacity(self):

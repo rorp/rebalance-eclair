@@ -58,6 +58,8 @@ def format_alias(alias):
 
 
 def format_ppm(ppm, min_length=None):
+    if ppm is None:
+        return chalk.bold("N/A")
     if min_length:
         return chalk.bold(f"{ppm:{min_length},}ppm")
     return chalk.bold(f"{ppm:,}ppm")
@@ -110,7 +112,7 @@ def format_success(string):
 
 
 def format_channel_id(channel_id):
-    return format_boring_string(channel_id)
+    return format_boring_string(str(channel_id).ljust(18, ' '))
 
 
 def format_warning(warning):
