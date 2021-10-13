@@ -298,10 +298,10 @@ class Eclair:
             last_hop_channels = [last_hop_channel]
         elif first_hop_channel:
             first_hop_channels = [first_hop_channel]
-            last_hop_channels = [chan for chan in self.get_channels(active_only=True) if chan != first_hop_channel]
+            last_hop_channels = [chan for chan in self.get_channels(active_only=True) if chan.chan_id != first_hop_channel.chan_id]
         elif last_hop_channel:
             last_hop_channels = [last_hop_channel]
-            first_hop_channels = [chan for chan in self.get_channels(active_only=True) if chan != last_hop_channel]
+            first_hop_channels = [chan for chan in self.get_channels(active_only=True) if chan.chan_id != last_hop_channel.chan_id]
         else:
             return []
 

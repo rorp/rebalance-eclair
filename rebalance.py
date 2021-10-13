@@ -245,6 +245,9 @@ class Rebalance:
         if self.arguments.reckless:
             self.output.print_line(format_error("Reckless mode enabled!"))
 
+        if self.arguments.dry_run:
+            self.output.print_line(format_error("Dry run!"))
+
         fee_factor = self.arguments.fee_factor
         fee_limit_sat = self.arguments.fee_limit
         fee_ppm_limit = self.arguments.fee_ppm_limit
@@ -264,7 +267,8 @@ class Rebalance:
             self.min_local,
             self.min_remote,
             self.output,
-            self.arguments.reckless
+            self.arguments.reckless,
+            self.arguments.dry_run
         ).rebalance()
 
     def get_first_hop_candidates(self):
@@ -511,6 +515,12 @@ def get_argument_parser():
         type=int,
         help="If set, only consider rebalance transactions that cost up to the given number of satoshis per "
              "1M satoshis sent."
+    )
+    rebalance_group.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Try to find a suitable route, but don't send any funds"
     )
     return parser
 

@@ -366,6 +366,7 @@ rebalance:
                         If set, only consider rebalance transactions that cost
                         up to the given number of satoshis per 1M satoshis
                         sent.
+  --dry-run             Try to find a suitable route, but don't send any funds
 ```
 
 ## Contributing

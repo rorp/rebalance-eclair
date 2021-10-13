@@ -25,7 +25,8 @@ class Logic:
             min_local,
             min_remote,
             output: Output,
-            reckless
+            reckless,
+            dry_run
     ):
         self.lnd = lnd
         self.first_hop_channel = first_hop_channel
@@ -39,6 +40,7 @@ class Logic:
         self.min_remote = min_remote
         self.output = output
         self.reckless = reckless
+        self.dry_run = dry_run
         if not self.fee_factor:
             self.fee_factor = 1.0
 
@@ -142,8 +144,11 @@ class Logic:
         self.output.print_line(f" (fee {fee_formatted}, {ppm_formatted})")
         self.output.print_route(route)
 
-        response = self.lnd.send_payment(payment_request, route)
-        is_successful = response.failure.code == 0
+        if self.dry_run:
+            is_successful = True
+        else:
+            response = self.lnd.send_payment(payment_request, route)
+            is_successful = response.failure.code == 0
         if is_successful:
             self.print_success_statistics(route, route_ppm)
             return True
