@@ -22,8 +22,9 @@ class PayInvoiceResponse:
             self.payment_hash = json['paymentHash']
             self.payment_preimage = json['status'].get('paymentPreimage')
             self.id = json.get('parentId')
-            if 'failures' in json['status']:
-                self.failure = Failure(-1, [j['t'] for j in json['failures']])
+            status = json['status']
+            if 'failures' in status:
+                self.failure = Failure(-1, [j['failureMessage'] for j in status['failures']])
             else:
                 self.failure = Failure(0, '')
 
@@ -333,25 +334,22 @@ class Eclair:
             'amountMsat': int(amount * 1000),
             'format': 'full',
             'ignoreNodeIds': ignore_node_ids,
-            'ignoreChannelIds': [first_hop_channel.chan_id, last_hop_channel.chan_id] + ignore_channel_ids,
+            'ignoreShortChannelIds': [first_hop_channel.chan_id, last_hop_channel.chan_id] + ignore_channel_ids,
             'maxFeeMsat': fee_limit,
         }
         found_routes = self.call_eclair("findroutebetweennodes", params)
-        if isinstance(found_routes, list):
-            routes = []
-            for found_route in found_routes:
-                amount_msat = found_route['amount']
-                hops = [self.route_to_hop(hop, amount_msat) for hop in found_route['hops']]
-                if first_hop_channel:
-                    hops.insert(0, first_hop_channel.to_hop(amount_msat, 0, first=True))
-                if last_hop_channel:
-                    hops.append(
-                        last_hop_channel.to_hop(amount_msat, self.calc_fees_msat(amount_msat, last_hop_channel.chan_id),
-                                                first=False))
-                routes.append(Route(amount_msat, hops))
-            return routes
-        else:
-            return []
+        routes = []
+        for found_route in found_routes['routes']:
+            amount_msat = found_route['amount']
+            hops = [self.route_to_hop(hop, amount_msat) for hop in found_route['hops']]
+            if first_hop_channel:
+                hops.insert(0, first_hop_channel.to_hop(amount_msat, 0, first=True))
+            if last_hop_channel:
+                hops.append(
+                    last_hop_channel.to_hop(amount_msat, self.calc_fees_msat(amount_msat, last_hop_channel.chan_id),
+                                            first=False))
+            routes.append(Route(amount_msat, hops))
+        return routes
 
     def calc_fees_msat(self, amount_msat, chan_id):
         return int(self.get_policy_from(chan_id).fee_base_msat + amount_msat * self.get_ppm_from(chan_id) / 1_000_000)
