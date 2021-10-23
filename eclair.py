@@ -5,6 +5,20 @@ import requests
 from requests.auth import HTTPBasicAuth
 
 
+class Audit:
+    def __init__(self, json):
+        self.sent = []
+        self.received = []
+        self.relayed = []
+
+        if 'sent' in json and isinstance(json['sent'], list):
+            self.sent = json['sent']
+        if 'received' in json and isinstance(json['received'], list):
+            self.received = json['received']
+        if 'relayed' in json and isinstance(json['relayed'], list):
+            self.relayed = json['relayed']
+
+
 class Failure:
     def __init__(self, code, errorMessages):
         self.code = code
@@ -80,18 +94,21 @@ class Channel:
         self.chan_point = commitments['commitInput']['outPoint']
         self.channel_point = self.chan_point
 
-        channel_update = data['channelUpdate']
-        self.fee_base_msat = channel_update['feeBaseMsat']
-        self.fee_rate_milli_msat = channel_update['feeProportionalMillionths']
+        self.channel_update = None
+        self.chan_id = self.channel_id
+        if 'channelUpdate' in data:
+            channel_update = data['channelUpdate']
+            self.chan_id = channel_update['shortChannelId']
+            self.fee_base_msat = channel_update['feeBaseMsat']
+            self.fee_rate_milli_msat = channel_update['feeProportionalMillionths']
 
-        self.chan_id = channel_update['shortChannelId']
-        if channel_update['channelFlags']['isNode1']:
-            self.node1_pub = self.local_pubkey
-            self.node2_pub = self.remote_pubkey
-        else:
-            self.node1_pub = self.remote_pubkey
-            self.node2_pub = self.local_pubkey
-        self.channel_update = channel_update
+            if channel_update['channelFlags']['isNode1']:
+                self.node1_pub = self.local_pubkey
+                self.node2_pub = self.remote_pubkey
+            else:
+                self.node1_pub = self.remote_pubkey
+                self.node2_pub = self.local_pubkey
+            self.channel_update = channel_update
 
     def __repr__(self):
         return f"{self.chan_id}:{self.node1_pub}:{self.node2_pub}"
@@ -226,9 +243,13 @@ class Eclair:
         return self.call_eclair("parseinvoice", params)
 
     @lru_cache(maxsize=None)
+    def get_audit(self, frm=0, to=99999999999):
+        return Audit(self.call_eclair("audit", {'from': frm, 'to': to}))
+
+    @lru_cache(maxsize=None)
     def get_channels(self, active_only=False):
         json = self.call_eclair("channels")
-        return [Channel(ch) for ch in json if not active_only or ch["state"] == "NORMAL"]
+        return [Channel(ch) for ch in json if ch["state"] == "NORMAL"]
 
     def get_channel(self, channel_id):
         for ch in self.get_channels():
@@ -302,10 +323,12 @@ class Eclair:
             last_hop_channels = [last_hop_channel]
         elif first_hop_channel:
             first_hop_channels = [first_hop_channel]
-            last_hop_channels = [chan for chan in self.get_channels(active_only=True) if chan.chan_id != first_hop_channel.chan_id]
+            last_hop_channels = [chan for chan in self.get_channels(active_only=True) if
+                                 chan.chan_id != first_hop_channel.chan_id]
         elif last_hop_channel:
             last_hop_channels = [last_hop_channel]
-            first_hop_channels = [chan for chan in self.get_channels(active_only=True) if chan.chan_id != last_hop_channel.chan_id]
+            first_hop_channels = [chan for chan in self.get_channels(active_only=True) if
+                                  chan.chan_id != last_hop_channel.chan_id]
         else:
             return []
 
