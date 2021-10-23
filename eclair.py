@@ -1,3 +1,4 @@
+import time
 from functools import lru_cache
 
 import requests
@@ -207,12 +208,14 @@ class Eclair:
             'invoice': payment_request.serialized,
             'finalCltvExpiry': payment_request.cltv_expiry,
         }
-        payment_id = self.call_eclair("sendtoroute", params)['parentId']
+        payment = self.call_eclair("sendtoroute", params)
+        payment_id = payment['parentId']
         tries = 0
         while tries < 100:
             res = self.call_eclair("getsentinfo", {'id': payment_id})
-            if res[0]['status']['type'] != 'pending':
+            if len(res) > 0 and res[0]['status']['type'] != 'pending':
                 return PayInvoiceResponse(res[0])
+            time.sleep(1)
             tries = tries + 1
         return PayInvoiceResponse({'error': 'Cannot get sent info: too many tries'})
 
