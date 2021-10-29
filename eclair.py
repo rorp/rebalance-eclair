@@ -31,17 +31,26 @@ class Failure:
 
 class PayInvoiceResponse:
     def __init__(self, json):
-        if 'error' in json:
-            self.failure = Failure(-1, [json['error']])
+        self.payment_hash = json['paymentHash']
+        self.payment_preimage = json['status'].get('paymentPreimage')
+        self.id = json.get('parentId')
+        status = json['status']
+        self.failures = []
+        self.failed_node = None
+        self.failed_channel = None
+        if 'failures' in status:
+            self.failures = status['failures']
+            for f in self.failures:
+                if self.failed_node is None:
+                    if 'failedNode' in f:
+                        self.failed_node = f['failedNode']
+                    for hop in f['failedRoute']:
+                        if self.failed_node == hop['nodeId']:
+                            self.failed_channel = hop['shortChannelId']
+                            break
+            self.failure = Failure(-1, [j['failureMessage'] for j in self.failures])
         else:
-            self.payment_hash = json['paymentHash']
-            self.payment_preimage = json['status'].get('paymentPreimage')
-            self.id = json.get('parentId')
-            status = json['status']
-            if 'failures' in status:
-                self.failure = Failure(-1, [j['failureMessage'] for j in status['failures']])
-            else:
-                self.failure = Failure(0, '')
+            self.failure = Failure(0, '')
 
 
 class ChannelDesc:
@@ -115,10 +124,12 @@ class Channel:
 
     def to_hop(self, amt_to_forward_msat, fee_msat, first):
         if first:
+            source_pub_key = self.local_pubkey
             pub_key = self.remote_pubkey
         else:
+            source_pub_key = self.remote_pubkey
             pub_key = self.local_pubkey
-        return Hop(pub_key, self.chan_id, self.capacity, amt_to_forward_msat, fee_msat)
+        return Hop(source_pub_key, pub_key, self.chan_id, self.capacity, amt_to_forward_msat, fee_msat)
 
 
 class Invoice:
@@ -135,7 +146,8 @@ class Invoice:
 
 
 class Hop:
-    def __init__(self, pub_key, chan_id, chan_capacity, amt_to_forward_msat, fee_msat):
+    def __init__(self, source_pub_key, pub_key, chan_id, chan_capacity, amt_to_forward_msat, fee_msat):
+        self.source_pub_key = source_pub_key
         self.pub_key = pub_key
         self.chan_id = chan_id
         self.chan_capacity = chan_capacity
@@ -228,13 +240,13 @@ class Eclair:
         payment = self.call_eclair("sendtoroute", params)
         payment_id = payment['parentId']
         tries = 0
-        while tries < 100:
+        while tries < 240:
             res = self.call_eclair("getsentinfo", {'id': payment_id})
             if len(res) > 0 and res[0]['status']['type'] != 'pending':
                 return PayInvoiceResponse(res[0])
             time.sleep(1)
             tries = tries + 1
-        return PayInvoiceResponse({'error': 'Cannot get sent info: too many tries'})
+        raise Exception('Cannot get sent info: too many tries')
 
     def decode_payment_request(self, payment_request):
         params = {
@@ -359,13 +371,15 @@ class Eclair:
             'targetNodeId': last_hop_pubkey,
             'amountMsat': int(amount * 1000),
             'format': 'full',
-            'ignoreNodeIds': ignore_node_ids,
-            'ignoreShortChannelIds': [first_hop_channel.chan_id, last_hop_channel.chan_id] + ignore_channel_ids,
+            'ignoreNodeIds': ",".join(ignore_node_ids),
+            'ignoreShortChannelIds': ",".join(
+                [first_hop_channel.chan_id, last_hop_channel.chan_id] + ignore_channel_ids),
             'maxFeeMsat': fee_limit,
         }
         found_routes = self.call_eclair("findroutebetweennodes", params)
         routes = []
-        for found_route in found_routes['routes']:
+        if len(found_routes['routes']) > 0:
+            found_route = found_routes['routes'][0]
             amount_msat = found_route['amount']
             hops = [self.route_to_hop(hop, amount_msat) for hop in found_route['hops']]
             if first_hop_channel:
@@ -386,7 +400,7 @@ class Eclair:
         fee_rate_milli_msat = last_update['feeProportionalMillionths']
         fee_base_msat = last_update['feeBaseMsat']
         fee_msat = int(amt_to_forward_msat / 1_000_000 * fee_rate_milli_msat + fee_base_msat)
-        return Hop(hop['nextNodeId'], last_update['shortChannelId'], int(last_update['htlcMaximumMsat'] / 1000),
+        return Hop(hop['nodeId'], hop['nextNodeId'], last_update['shortChannelId'], int(last_update['htlcMaximumMsat'] / 1000),
                    amt_to_forward_msat,
                    fee_msat)
 

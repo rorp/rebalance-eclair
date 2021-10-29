@@ -222,8 +222,10 @@ class Logic:
             self.output.print_line(format_warning("Incorrect CLTV expiry"))
             routes.ignore_edge_on_route(failure_source_pubkey, route)
         elif code == -1:
+            # Eclair error messages
             self.output.print_line(format_warning(response.failure.error_message()))
-            routes.ignore_edge_on_route(failure_source_pubkey, route)
+            if response.failed_node:
+                routes.ignore_edge_on_route(response.failed_node, route)
         else:
             self.output.print_line(format_error(f"Unknown error code {repr(code)}:"))
             self.output.print_line(format_error(repr(response)))
