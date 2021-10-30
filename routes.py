@@ -79,23 +79,23 @@ class Routes:
         self.ignore_edge_from_to(channel.chan_id, own_key, other_key, show_message)
 
     def ignore_edge_on_route(self, failure_source_pubkey, route):
-        if self.is_lnd():
-            ignore_next = False
-            for hop in route.hops:
-                if ignore_next:
-                    self.ignore_edge_from_to(
-                        hop.chan_id, failure_source_pubkey, hop.pub_key
-                    )
-                    return
-                if hop.pub_key == failure_source_pubkey:
-                    ignore_next = True
-        else:
-            for hop in route.hops:
-                if hop.source_pub_key == failure_source_pubkey:
-                    self.ignore_edge_from_to(
-                        hop.chan_id, failure_source_pubkey, hop.pub_key
-                    )
-                    return
+        ignore_next = False
+        for hop in route.hops:
+            if ignore_next:
+                self.ignore_edge_from_to(
+                    hop.chan_id, failure_source_pubkey, hop.pub_key
+                )
+                return
+            if hop.pub_key == failure_source_pubkey:
+                ignore_next = True
+
+    def ignore_edge_on_route_eclair(self, failure_source_pubkey, route):
+        for hop in route.hops:
+            if hop.source_pub_key == failure_source_pubkey:
+                self.ignore_edge_from_to(
+                    hop.chan_id, failure_source_pubkey, hop.pub_key
+                )
+                return
 
     def ignore_hop_on_route(self, hop_to_ignore, route):
         previous_pubkey = self.lnd.get_own_pubkey()

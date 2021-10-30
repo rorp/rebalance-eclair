@@ -225,7 +225,7 @@ class Logic:
             # Eclair error messages
             self.output.print_line(format_warning(response.failure.error_message()))
             if response.failed_node:
-                routes.ignore_edge_on_route(response.failed_node, route)
+                routes.ignore_edge_on_route_eclair(response.failed_node, route)
         else:
             self.output.print_line(format_error(f"Unknown error code {repr(code)}:"))
             self.output.print_line(format_error(repr(response)))

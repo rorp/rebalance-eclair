@@ -5,6 +5,10 @@ import requests
 from requests.auth import HTTPBasicAuth
 
 
+class EclairRPCException(Exception):
+    pass
+
+
 class Audit:
     def __init__(self, json):
         self.sent = []
@@ -376,20 +380,23 @@ class Eclair:
                 [first_hop_channel.chan_id, last_hop_channel.chan_id] + ignore_channel_ids),
             'maxFeeMsat': fee_limit,
         }
-        found_routes = self.call_eclair("findroutebetweennodes", params)
-        routes = []
-        if len(found_routes['routes']) > 0:
-            found_route = found_routes['routes'][0]
-            amount_msat = found_route['amount']
-            hops = [self.route_to_hop(hop, amount_msat) for hop in found_route['hops']]
-            if first_hop_channel:
-                hops.insert(0, first_hop_channel.to_hop(amount_msat, 0, first=True))
-            if last_hop_channel:
-                hops.append(
-                    last_hop_channel.to_hop(amount_msat, self.calc_fees_msat(amount_msat, last_hop_channel.chan_id),
-                                            first=False))
-            routes.append(Route(amount_msat, hops))
-        return routes
+        try:
+            found_routes = self.call_eclair("findroutebetweennodes", params)
+            routes = []
+            if len(found_routes['routes']) > 0:
+                found_route = found_routes['routes'][0]
+                amount_msat = found_route['amount']
+                hops = [self.route_to_hop(hop, amount_msat) for hop in found_route['hops']]
+                if first_hop_channel:
+                    hops.insert(0, first_hop_channel.to_hop(amount_msat, 0, first=True))
+                if last_hop_channel:
+                    hops.append(
+                        last_hop_channel.to_hop(amount_msat, self.calc_fees_msat(amount_msat, last_hop_channel.chan_id),
+                                                first=False))
+                routes.append(Route(amount_msat, hops))
+            return routes
+        except EclairRPCException:
+            return []
 
     def calc_fees_msat(self, amount_msat, chan_id):
         return int(self.get_policy_from(chan_id).fee_base_msat + amount_msat * self.get_ppm_from(chan_id) / 1_000_000)
@@ -400,7 +407,8 @@ class Eclair:
         fee_rate_milli_msat = last_update['feeProportionalMillionths']
         fee_base_msat = last_update['feeBaseMsat']
         fee_msat = int(amt_to_forward_msat / 1_000_000 * fee_rate_milli_msat + fee_base_msat)
-        return Hop(hop['nodeId'], hop['nextNodeId'], last_update['shortChannelId'], int(last_update['htlcMaximumMsat'] / 1000),
+        return Hop(hop['nodeId'], hop['nextNodeId'], last_update['shortChannelId'],
+                   int(last_update['htlcMaximumMsat'] / 1000),
                    amt_to_forward_msat,
                    fee_msat)
 
@@ -408,5 +416,5 @@ class Eclair:
         url = f"http://{self.address}/{endpoint}"
         res = requests.request("POST", url, auth=HTTPBasicAuth("eclair-cli", self.password), data=payload).json()
         if 'error' in res:
-            raise Exception(res['error'])
+            raise EclairRPCException(res['error'])
         return res
