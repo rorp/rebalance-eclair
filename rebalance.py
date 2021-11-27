@@ -173,6 +173,8 @@ class Rebalance:
         own_ppm = self.lnd.get_ppm_to(channel.chan_id)
         remote_ppm = self.lnd.get_ppm_from(channel.chan_id)
         print(f"Channel ID:       {format_channel_id(channel.chan_id)}")
+        if hasattr(channel, "channel_id"):
+            print(f"                  {format_boring_string(channel.channel_id)}")
         print(f"Alias:            {format_alias(self.lnd.get_node_alias(channel.remote_pubkey))}")
         print(f"Pubkey:           {format_boring_string(channel.remote_pubkey)}")
         print(f"Channel Point:    {format_boring_string(channel.channel_point)}")
