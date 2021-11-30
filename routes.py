@@ -110,7 +110,8 @@ class Routes:
         max_fee_msat = -1
         max_fee_hop = None
         for hop in route.hops:
-            if route.hops[-2].chan_id == hop.chan_id and self.last_hop_channel:
+            last_idx = -2 if self.is_lnd() else -1
+            if route.hops[last_idx].chan_id == hop.chan_id and self.last_hop_channel:
                 continue
             if hop.fee_msat > max_fee_msat:
                 max_fee_msat = hop.fee_msat

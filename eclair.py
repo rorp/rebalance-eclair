@@ -265,7 +265,8 @@ class Eclair:
     @lru_cache(maxsize=None)
     def get_channels(self, active_only=False):
         json = self.call_eclair("channels")
-        return [Channel(ch) for ch in json if ch["state"] == "NORMAL"]
+        filtered = [Channel(ch) for ch in json if ch["state"] == "NORMAL"]
+        return sorted(filtered, key=lambda ch: ch.chan_id)
 
     def get_channel(self, channel_id):
         for ch in self.get_channels():
