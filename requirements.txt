@@ -1,7 +1,7 @@
 googleapis-common-protos==1.53.0
-grpcio==1.41.0
-protobuf==3.18.1
+grpcio==1.42.0
+protobuf==3.19.1
 six==1.16.0
-yachalk==0.1.4
+yachalk==0.1.5
 pyhocon==0.3.58
 requests==2.26.0

@@ -243,7 +243,7 @@ With values smaller than 1 only cheaper routes are considered.
 
 ### Fee Limit
 
-As an alternative to `--fee-factor` (which is the default, with a value of 1), you can also specify an absolute fee
+Unrelated to `--fee-factor` (which is the default, with a value of 1), you can also specify an absolute fee
 limit using `--fee-limit`. If you decide to do so, only routes that cost up to the given number (in satoshis) are
 considered.
 
@@ -276,7 +276,8 @@ usage: rebalance.py [-h] [--lnddir LNDDIR] [--network NETWORK] [--grpc GRPC]
                     [-f CHANNEL] [-t CHANNEL] [-A] [-a AMOUNT | -p PERCENTAGE]
                     [--min-amount MIN_AMOUNT] [--min-local MIN_LOCAL]
                     [--min-remote MIN_REMOTE] [-e EXCLUDE] [--reckless]
-                    [--fee-factor FEE_FACTOR | --fee-limit FEE_LIMIT | --fee-ppm-limit FEE_PPM_LIMIT]
+                    [--fee-factor FEE_FACTOR]
+                    [--fee-limit FEE_LIMIT | --fee-ppm-limit FEE_PPM_LIMIT]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -350,7 +351,7 @@ rebalance:
                         viable. You might also want to set --min-local 0 and
                         --min-remote 0. If set, you also need to set --amount
                         and either --fee-limit or --fee-ppm-limit, and you
-                        must not enable --adjust-fee-to-limits (-A).
+                        must not enable --adjust-amount-to-limits (-A).
   --fee-factor FEE_FACTOR
                         (default: 1.0) Compare the costs against the expected
                         income, scaled by this factor. As an example, with

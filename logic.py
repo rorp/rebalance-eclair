@@ -96,6 +96,7 @@ class Logic:
         return False
 
     def get_fee_limit_msat(self):
+        fee_limit_msat = None
         if self.fee_limit_sat:
             fee_limit_msat = self.fee_limit_sat * 1_000
         elif self.fee_ppm_limit:
@@ -103,7 +104,10 @@ class Logic:
                 fee_limit_msat = self.fee_ppm_limit * self.amount / 1_000
             else:
                 fee_limit_msat = max(1_000, self.fee_ppm_limit * self.amount / 1_000)
-        elif self.last_hop_channel:
+        elif not self.last_hop_channel:
+            return None
+
+        if self.last_hop_channel:
             fee_rate = self.lnd.get_ppm_to(self.last_hop_channel.chan_id)
             if fee_rate > MAX_FEE_RATE:
                 last_hop_alias = self.lnd.get_node_alias(self.last_hop_channel.remote_pubkey)
@@ -113,10 +117,14 @@ class Logic:
                 )
                 fee_rate = MAX_FEE_RATE
             policy = self.lnd.get_policy_to(self.last_hop_channel.chan_id)
-            fee_limit_msat = self.compute_fee(self.amount, self.fee_factor * fee_rate, policy) * 1_000
-            fee_limit_msat = max(1_000, fee_limit_msat)
-        else:
-            return None
+            if fee_limit_msat:
+                fee_limit_msat = min(
+                    fee_limit_msat,
+                    self.compute_fee(self.amount, self.fee_factor * fee_rate, policy) * 1_000
+                )
+            else:
+                fee_limit_msat = self.compute_fee(self.amount, self.fee_factor * fee_rate, policy) * 1_000
+        fee_limit_msat = max(1_000, fee_limit_msat)
 
         ppm_limit = int(fee_limit_msat / self.amount * 1_000)
 
@@ -410,9 +418,12 @@ class Logic:
             # ignore first hops with high fee rate configured by our node (causing high missed future fees)
             max_fee_rate_first_hop = math.ceil(fee_limit_msat * 1_000 / self.amount)
             for channel in self.lnd.get_channels():
-                fee_rate = self.lnd.get_ppm_to(channel.chan_id)
-                if fee_rate > max_fee_rate_first_hop and self.first_hop_channel != channel:
-                    routes.ignore_first_hop(channel, show_message=False)
+                try:
+                    fee_rate = self.lnd.get_ppm_to(channel.chan_id)
+                    if fee_rate > max_fee_rate_first_hop and self.first_hop_channel != channel:
+                        routes.ignore_first_hop(channel, show_message=False)
+                except:
+                    pass
         for channel in self.lnd.get_channels():
             if self.low_outbound_liquidity_after_sending(channel, self.amount):
                 routes.ignore_first_hop(channel, show_message=False)
@@ -420,24 +431,30 @@ class Logic:
     def ignore_cheap_channels_for_last_hop(self, min_fee_last_hop, routes):
         for channel in self.lnd.get_channels():
             channel_id = channel.chan_id
-            ppm = self.lnd.get_ppm_to(channel_id)
-            policy = self.lnd.get_policy_to(channel_id)
-            fee = self.compute_fee(self.amount, self.fee_factor * ppm, policy)
-            if fee < min_fee_last_hop:
-                routes.ignore_edge_from_to(
-                    channel_id, channel.remote_pubkey, self.lnd.get_own_pubkey(), show_message=False
-                )
+            try:
+                ppm = self.lnd.get_ppm_to(channel_id)
+                policy = self.lnd.get_policy_to(channel_id)
+                fee = self.compute_fee(self.amount, self.fee_factor * ppm, policy)
+                if fee < min_fee_last_hop:
+                    routes.ignore_edge_from_to(
+                        channel_id, channel.remote_pubkey, self.lnd.get_own_pubkey(), show_message=False
+                    )
+            except:
+                pass
 
     def ignore_first_hops_with_fee_rate_higher_than_last_hop(self, routes):
         last_hop_fee_rate = self.lnd.get_ppm_to(self.last_hop_channel.chan_id)
         from_pub_key = self.lnd.get_own_pubkey()
         for channel in self.lnd.get_channels():
             chan_id = channel.chan_id
-            if self.lnd.get_ppm_to(chan_id) > last_hop_fee_rate:
-                to_pub_key = channel.remote_pubkey
-                routes.ignore_edge_from_to(
-                    chan_id, from_pub_key, to_pub_key, show_message=False
-                )
+            try:
+                if self.lnd.get_ppm_to(chan_id) > last_hop_fee_rate:
+                    to_pub_key = channel.remote_pubkey
+                    routes.ignore_edge_from_to(
+                        chan_id, from_pub_key, to_pub_key, show_message=False
+                    )
+            except:
+                pass
 
     def ignore_last_hops_with_low_inbound(self, routes):
         for channel in self.lnd.get_channels():

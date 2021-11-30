@@ -237,12 +237,12 @@ class Rebalance:
 
         if amount == 0:
             print(f"Amount is {format_amount(0)} sat, nothing to do")
-            sys.exit(0)
+            sys.exit(1)
 
         if amount < self.min_amount:
             print(f"Amount {format_amount(amount)} sat is below limit of {format_amount(self.min_amount)} sat, "
                   f"nothing to do (see --min-amount)")
-            sys.exit(0)
+            sys.exit(1)
 
         if self.arguments.reckless:
             self.output.print_line(format_error("Reckless mode enabled!"))
@@ -494,10 +494,9 @@ def get_argument_parser():
         help="Allow rebalance transactions that are not economically viable. "
              "You might also want to set --min-local 0 and --min-remote 0. "
              "If set, you also need to set --amount and either --fee-limit or --fee-ppm-limit, and you must not enable "
-             "--adjust-fee-to-limits (-A)."
+             "--adjust-amount-to-limits (-A)."
     )
-    fee_group = rebalance_group.add_mutually_exclusive_group()
-    fee_group.add_argument(
+    rebalance_group.add_argument(
         "--fee-factor",
         default=1.0,
         type=float,
@@ -507,6 +506,7 @@ def get_argument_parser():
         "smaller than 1.0 to restrict routes to only consider those earning "
         "more/costing less. This factor is ignored with --reckless.",
     )
+    fee_group = rebalance_group.add_mutually_exclusive_group()
     fee_group.add_argument(
         "--fee-limit",
         type=int,
