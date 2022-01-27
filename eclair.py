@@ -9,6 +9,10 @@ class EclairRPCException(Exception):
     pass
 
 
+class RouteNotFoundException(Exception):
+    pass
+
+
 class Audit:
     def __init__(self, json):
         self.sent = []
@@ -330,7 +334,7 @@ class Eclair:
     ):
         ignore_channel_ids = [p['chan_id'] for p in ignored_pairs]
 
-        ignore_node_ids = [self.get_own_pubkey()]
+        ignore_node_ids = []
 
         if isinstance(ignored_nodes, list):
             ignore_node_ids = ignore_node_ids + ignored_nodes
@@ -366,19 +370,25 @@ class Eclair:
             return []
 
         last_hop_pubkey = last_hop_channel.remote_pubkey
-        first_hop_pubkey = first_hop_channel.remote_pubkey
+        first_hop_pubkey = self.get_own_pubkey()
+        amount_msat = int(amount * 1000)
+        last_hop_fee = self.calc_fees_msat(amount_msat, last_hop_channel.chan_id)
         if fee_limit_msat:
-            fee_limit = int(fee_limit_msat)
+            fee_limit = int(fee_limit_msat) - last_hop_fee
         else:
             fee_limit = None
+
+        local_channel_ids = [chan.chan_id for chan in self.get_channels(active_only=False) if
+                             chan.chan_id != first_hop_channel.chan_id]
+
         params = {
             'sourceNodeId': first_hop_pubkey,
             'targetNodeId': last_hop_pubkey,
             'amountMsat': int(amount * 1000),
             'format': 'full',
-            'ignoreNodeIds': ",".join(ignore_node_ids),
-            'ignoreShortChannelIds': ",".join(
-                [first_hop_channel.chan_id, last_hop_channel.chan_id] + ignore_channel_ids),
+            'ignoreNodeIds': self.empty_to_none(",".join(ignore_node_ids)),
+            'ignoreShortChannelIds': self.empty_to_none(",".join(
+                self.concat(local_channel_ids, ignore_channel_ids))),
             'maxFeeMsat': fee_limit,
         }
         try:
@@ -386,17 +396,14 @@ class Eclair:
             routes = []
             if len(found_routes['routes']) > 0:
                 found_route = found_routes['routes'][0]
-                amount_msat = found_route['amount']
                 hops = [self.route_to_hop(hop, amount_msat) for hop in found_route['hops']]
-                if first_hop_channel:
-                    hops.insert(0, first_hop_channel.to_hop(amount_msat, 0, first=True))
+                if hops[0].chan_id != first_hop_channel.chan_id:
+                    raise EclairRPCException('Route starts with unexpected channel: ' + hops[0].chan_id)
                 if last_hop_channel:
-                    hops.append(
-                        last_hop_channel.to_hop(amount_msat, self.calc_fees_msat(amount_msat, last_hop_channel.chan_id),
-                                                first=False))
+                    hops.append(last_hop_channel.to_hop(amount_msat, last_hop_fee, first=False))
                 routes.append(Route(amount_msat, hops))
             return routes
-        except EclairRPCException:
+        except RouteNotFoundException:
             return []
 
     def calc_fees_msat(self, amount_msat, chan_id):
@@ -417,5 +424,23 @@ class Eclair:
         url = f"http://{self.address}/{endpoint}"
         res = requests.request("POST", url, auth=HTTPBasicAuth("eclair-cli", self.password), data=payload).json()
         if 'error' in res:
-            raise EclairRPCException(res['error'])
+            if res['error'] in ['route not found', 'balance too low']:
+                raise RouteNotFoundException(res['error'])
+            else:
+                raise EclairRPCException(res['error'])
+        return res
+
+    @staticmethod
+    def empty_to_none(str):
+        if str == '':
+            return None
+        else:
+            return str
+
+    @staticmethod
+    def concat(l1, l2):
+        res = [x for x in l1]
+        for x in l2:
+            if not x in res:
+                res.append(x)
         return res
