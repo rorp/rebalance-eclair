@@ -156,7 +156,7 @@ class Lnd:
     def get_edge(self, channel_id):
         try:
             return self.stub.GetChanInfo(ln.ChanInfoRequest(chan_id=channel_id))
-        except:
+        except Exception:
             print(f"Unable to find channel edge {channel_id}")
             raise
 
