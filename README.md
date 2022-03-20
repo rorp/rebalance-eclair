@@ -1,8 +1,6 @@
-# rebalance-eclair
+# rebalance-lnd
 
-This is an adaptation of https://github.com/C-Otto/rebalance-lnd for `Eclair`.
-
-Using this script you can easily rebalance individual channels of your `lnd` of `Eclair` node by
+Using this script you can easily rebalance individual channels of your `lnd` node by
 sending funds out one channel, through the lightning network, back to yourself.
 
 This script helps you move funds between your channels so that you can increase the outbound liquidity in one channel,
@@ -16,7 +14,24 @@ Aside from paid fees, your total liquidity does not change.
 
 ## Installation
 
-### lnd
+There are several options for installing rebalance-eclair.
+
+1. [Using Python](#using-python)
+1. [Using Docker](#using-docker)
+1. [Using Umbrel's app store](#using-umbrels-app-store)
+1. [Using the RaspiBolt manual installation guide on any Debian-based OS](#using-the-raspibolt-guide) 
+
+### Using Python
+
+### Eclair
+
+This script needs an active `Eclair` (tested with v0.7.0, https://github.com/ACINQ/eclair) instance running.
+
+To allow the script to connect to your `Eclair` instance use `--eclairapi`   and `--eclairpassword` arguments.
+Alternatively, You need read permissions for the `Eclair` config file to read the API address and the API password from 
+the config file (by default `~/.eclair/ecalir.conf`, the path can be changed with optional argument `--eclairdir`).
+
+#### lnd
 
 This script needs an active `lnd` (tested with v0.13.0, https://github.com/lightningnetwork/lnd) instance running.
 If you compile `lnd` yourself, you need to include the `routerrpc` build tag:
@@ -29,14 +44,6 @@ By default, this script connects to `localhost:10009`, using the macaroon file i
 If this does not help, it also tries to find the file in `~/umbrel/lnd/data/chain/bitcoin/mainnet/admin.macaroon`.
 If you need to change this, please have a look at the optional arguments `--grpc` and `--lnddir`.
 
-### Eclair
-
-This script needs an active `Eclair` (tested with v0.7.0, https://github.com/ACINQ/eclair) instance running.
-
-To allow the script to connect to your `Eclair` instance use `--eclairapi`   and `--eclairpassword` arguments.
-Alternatively, You need read permissions for the `Eclair` config file to read the API address and the API password from 
-the config file (by default `~/.eclair/ecalir.conf`, the path can be changed with optional argument `--eclairdir`).
-
 #### rebalance-eclair itself
 
 You need to download the files that are part of this project, for example using [git](https://git-scm.com/):
@@ -44,11 +51,8 @@ You need to download the files that are part of this project, for example using 
 ```sh
 cd /some/where/
 git clone https://github.com/rorp/rebalance-eclair.git
-cd rebalance-eclair/
+cd rebalance-elair/
 ```
-
-Alternatively, you may also download the files in a ZIP file offered by GitHub:
-https://github.com/C-Otto/rebalance-lnd/archive/refs/heads/main.zip
 
 #### Python Dependencies
 
@@ -67,6 +71,41 @@ Depending on your system, you can do this in one of the following ways:
 - `./rebalance.py`
 - `python rebalance.py`
 
+### Using Docker
+
+Using the containerized version of rebalance-lnd spares you from the installation of python and its dependencies.
+You start by fetching the latest version of the dedicated docker container.
+
+```sh
+docker pull rebalancelnd/rebalance-lnd:latest
+```
+
+You can now have the docker image interact with your lnd installation:
+
+```sh
+docker run --rm --network=host --add-host=host.docker.internal:host-gateway -it -v /home/lnd:/root/.lnd rebalancelnd/rebalance-lnd --grpc host.docker.internal:10009
+```
+
+The above command assumes `/home/lnd` is your lnd configuration directory. Please adjust as required.
+
+#### Note for Umbrel/Umbrel-OS users
+
+To inject rebalance-lnd into your umbrel network you can run it using the following command line:
+
+```sh
+docker run --rm --network=umbrel_main_network -it -v /home/umbrel/umbrel/lnd:/root/.lnd rebalancelnd/rebalance-lnd --grpc 10.21.21.9:10009
+```
+
+Optionally you can create an alias in your shells environment file like so:
+
+```sh
+alias rebalance-lnd="docker run --rm --network=umbrel_main_network -it -v /home/umbrel/umbrel/lnd:/root/.lnd rebalancelnd/rebalance-lnd --grpc 10.21.21.9:10009"
+```
+
+### Using Umbrel's app store
+
+The [`lightning-shell`](https://github.com/ibz/lightning-shell) app available in the Umbrel app store comes with rebalance-lnd installed and configured. It should just work out of the box!
+
 ## Updating
 
 If you use docker, update the image running `docker pull rebalancelnd/rebalance-lnd:latest` again, otherwise follow these steps to update the python version:
@@ -76,6 +115,10 @@ latest version. You may also delete everything and start over with a fresh insta
 any data that needs to be kept.
 
 Do not forget to update the Python dependencies as described above.
+
+### Using the RaspiBolt guide
+
+If you run a node on a Debian-based OS, you can follow the [RaspiBolt guide](https://raspibolt.org/bonus/lightning/rebalance-lnd.html) that explains how to manually install, use, update and uninstall rebalance-lnd on your node.
 
 # Usage
 
@@ -297,12 +340,6 @@ optional arguments:
   --network NETWORK     (default mainnet) lnd network (mainnet, testnet,
                         simnet, ...)
   --grpc GRPC           (default localhost:10009) lnd gRPC endpoint
-  --eclairdir ECLAIRDIR
-                        (default ~/.eclair) Eclair directory
-  --eclairapi ECLAIRAPI
-                        Eclair API address
-  --eclairpassword ECLAIRPASSWORD
-                        Eclair API password
 
 list candidates:
   Show the unbalanced channels.
@@ -379,10 +416,22 @@ rebalance:
                         If set, only consider rebalance transactions that cost
                         up to the given number of satoshis per 1M satoshis
                         sent.
-  --dry-run             Try to find a suitable route, but don't send any funds
 ```
 
 ## Contributing
 
 Contributions are highly welcome!
-Feel free to submit issues and pull requests on https://github.com/rorp/rebalance-eclair/
+Feel free to submit issues and pull requests on https://github.com/C-Otto/rebalance-lnd/
+
+You can also send donations via keysend.
+For example, to send 500 satoshis to C-Otto with a message "Thank you for rebalance-lnd":
+
+```sh
+lncli sendpayment --amt=500 --data 7629168=5468616e6b20796f7520666f7220726562616c616e63652d6c6e64 --keysend --dest=027ce055380348d7812d2ae7745701c9f93e70c1adeb2657f053f91df4f2843c71
+```
+
+You can also specify an arbitrary message:
+
+```sh
+lncli sendpayment --amt=500 --data 7629168=$(echo -n "your message here" | xxd -pu -c 10000) --keysend --dest=027ce055380348d7812d2ae7745701c9f93e70c1adeb2657f053f91df4f2843c71
+```
