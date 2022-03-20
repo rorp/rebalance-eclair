@@ -283,20 +283,31 @@ class Eclair:
         return self.call_eclair("allchannels")
 
     def get_edge(self, chan_id):
-        for edge in self.get_edges():
-            if edge['shortChannelId'] == chan_id:
-                node1_pub = edge['a']
-                node2_pub = edge['b']
-                node1_policy = None
-                channel_update1 = self.get_channel_update(node1_pub, chan_id)
-                if channel_update1:
-                    node1_policy = RoutingPolicy(channel_update1)
-                node2_policy = None
-                channel_update2 = self.get_channel_update(node2_pub, chan_id)
-                if channel_update2:
-                    node2_policy = RoutingPolicy(channel_update2)
-                return Edge(chan_id, node1_pub, node2_pub, node1_policy, node2_policy)
-        return None
+        node1_pub = None
+        node2_pub = None
+        channel = self.get_channel(chan_id)
+        if channel is None:
+            for edge in self.get_edges():
+                if edge['shortChannelId'] == chan_id:
+                    node1_pub = edge['a']
+                    node2_pub = edge['b']
+                    break
+        else:
+            node1_pub = channel.node1_pub
+            node2_pub = channel.node2_pub
+
+        if node1_pub is None or node2_pub is None:
+            return None
+
+        node1_policy = None
+        channel_update1 = self.get_channel_update(node1_pub, chan_id)
+        if channel_update1:
+            node1_policy = RoutingPolicy(channel_update1)
+        node2_policy = None
+        channel_update2 = self.get_channel_update(node2_pub, chan_id)
+        if channel_update2:
+            node2_policy = RoutingPolicy(channel_update2)
+        return Edge(chan_id, node1_pub, node2_pub, node1_policy, node2_policy)
 
     def get_policy_to(self, channel_id):
         edge = self.get_edge(channel_id)
