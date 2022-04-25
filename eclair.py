@@ -101,6 +101,7 @@ class Channel:
         self.remote_pubkey = json['nodeId']
         self.local_pubkey = local_params['nodeId']
         self.channel_id = json['channelId']
+        self.state = json["state"]
 
         self.local_balance = int(to_local / 1000)
         self.local_chan_reserve_sat = local_params['channelReserve']
@@ -128,7 +129,7 @@ class Channel:
             self.channel_update = channel_update
 
     def __repr__(self):
-        return f"{self.chan_id}:{self.node1_pub}:{self.node2_pub}"
+        return f"{self.chan_id}:{self.node1_pub}:{self.node2_pub}:{self.state}"
 
     def to_hop(self, amt_to_forward_msat, fee_msat, first):
         if first:
@@ -174,6 +175,17 @@ class Route:
         self.total_amt = int(self.total_amt_msat / 1000)
 
 
+class Peer:
+    def __init__(self, peer_json, node_json):
+        self.alias = node_json['alias']
+        self.pub_key = peer_json['nodeId']
+        self.state = peer_json['state']
+        self.address = None
+        if 'address' in peer_json:
+            self.address = peer_json['address']
+        self.num_channels = peer_json['channels']
+
+
 class Eclair:
     def __init__(self, conf, address, password):
         if address:
@@ -212,7 +224,12 @@ class Eclair:
 
     @lru_cache(maxsize=None)
     def get_peers(self):
-        return self.call_eclair("peers")
+        json = self.call_eclair("peers")
+        res = []
+        for peer_json in json:
+            node_json = self.get_node_info(peer_json['nodeId'])
+            res.append(Peer(peer_json, node_json[0]))
+        return res
 
     @lru_cache(maxsize=None)
     def get_all_updates(self, pub_key):
@@ -267,9 +284,12 @@ class Eclair:
         return Audit(self.call_eclair("audit", {'from': frm, 'to': to}))
 
     @lru_cache(maxsize=None)
-    def get_channels(self, active_only=False):
+    def get_channels(self, active_only=True):
         json = self.call_eclair("channels")
-        filtered = [Channel(ch) for ch in json if ch["state"] == "NORMAL"]
+        if active_only:
+            filtered = [Channel(ch) for ch in json if ch["state"] == "NORMAL"]
+        else:
+            filtered = [Channel(ch) for ch in json]
         return sorted(filtered, key=lambda ch: ch.chan_id)
 
     def get_channel(self, channel_id):
@@ -379,6 +399,11 @@ class Eclair:
                     routes.append(route)
         return routes
 
+    def local_channel_ids(self):
+        local_channels = [chan for chan in self.get_channels(active_only=False) if chan.state != "CLOSING"]
+        ids = [chan.chan_id for chan in local_channels]
+        return ids
+
     def find_route(self, first_hop_channel, last_hop_channel, amount, fee_limit_msat, ignore_node_ids,
                    ignore_channel_ids):
         if first_hop_channel.chan_id in ignore_channel_ids:
@@ -395,8 +420,7 @@ class Eclair:
         else:
             fee_limit = None
 
-        local_channel_ids = [chan.chan_id for chan in self.get_channels(active_only=False) if
-                             chan.chan_id != first_hop_channel.chan_id]
+        ignore_channels = [ch for ch in self.concat(self.local_channel_ids(), ignore_channel_ids) if 'x' in ch]
 
         params = {
             'sourceNodeId': first_hop_pubkey,
@@ -404,8 +428,7 @@ class Eclair:
             'amountMsat': int(amount * 1000),
             'format': 'full',
             'ignoreNodeIds': self.empty_to_none(",".join(ignore_node_ids)),
-            'ignoreShortChannelIds': self.empty_to_none(",".join(
-                self.concat(local_channel_ids, ignore_channel_ids))),
+            'ignoreShortChannelIds': self.empty_to_none(",".join(ignore_channels)),
             'maxFeeMsat': fee_limit,
         }
         try:
