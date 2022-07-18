@@ -420,7 +420,9 @@ class Eclair:
         else:
             fee_limit = None
 
-        ignore_channels = [ch for ch in self.concat(self.local_channel_ids(), ignore_channel_ids) if 'x' in ch]
+        local_channel_ids = self.local_channel_ids()
+        local_channel_ids.remove(first_hop_channel.chan_id)
+        ignore_channels = [ch for ch in self.concat(local_channel_ids, ignore_channel_ids) if 'x' in ch]
 
         params = {
             'sourceNodeId': first_hop_pubkey,
