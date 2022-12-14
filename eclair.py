@@ -116,7 +116,7 @@ class Channel:
         self.channel_update = None
         self.chan_id = self.channel_id
         if 'shortIds' in data:
-            if real in data['shortIds']:
+            if 'real' in data['shortIds']:
                 self.chan_id = data['shortIds']['real']['realScid']
         if 'channelUpdate' in data:
             channel_update = data['channelUpdate']
