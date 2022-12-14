@@ -92,6 +92,7 @@ class Channel:
     def __init__(self, json):
         data = json['data']
         commitments = data['commitments']
+        self.public = commitments['channelFlags']['announceChannel']
         local_params = commitments['localParams']
         remote_params = commitments['remoteParams']
         local_commit = commitments['localCommit']
@@ -104,9 +105,9 @@ class Channel:
         self.state = json["state"]
 
         self.local_balance = int(to_local / 1000)
-        self.local_chan_reserve_sat = local_params['channelReserve']
+        self.local_chan_reserve_sat = local_params['requestedChannelReserve_opt']
         self.remote_balance = int(to_remote / 1000)
-        self.remote_chan_reserve_sat = remote_params['channelReserve']
+        self.remote_chan_reserve_sat = remote_params['requestedChannelReserve_opt']
         self.capacity = self.local_balance + self.remote_balance
 
         self.chan_point = commitments['commitInput']['outPoint']
@@ -114,9 +115,11 @@ class Channel:
 
         self.channel_update = None
         self.chan_id = self.channel_id
+        if 'shortIds' in data:
+            if real in data['shortIds']:
+                self.chan_id = data['shortIds']['real']['realScid']
         if 'channelUpdate' in data:
             channel_update = data['channelUpdate']
-            self.chan_id = channel_update['shortChannelId']
             self.fee_base_msat = channel_update['feeBaseMsat']
             self.fee_rate_milli_msat = channel_update['feeProportionalMillionths']
 
@@ -129,7 +132,7 @@ class Channel:
             self.channel_update = channel_update
 
     def __repr__(self):
-        return f"{self.chan_id}:{self.node1_pub}:{self.node2_pub}:{self.state}"
+        return f"{self.chan_id}:{self.node1_pub}:{self.node2_pub}:{self.state}:{self.public}"
 
     def to_hop(self, amt_to_forward_msat, fee_msat, first):
         if first:
@@ -248,7 +251,8 @@ class Eclair:
     def generate_invoice(self, memo, amount):
         params = {
             "description": memo,
-            "amountMsat": amount * 1000
+            "amountMsat": amount * 1000,
+            "expireIn": 2 * 60 * 60
         }
         return Invoice(self.call_eclair("createinvoice", params))
 
@@ -265,13 +269,13 @@ class Eclair:
         payment = self.call_eclair("sendtoroute", params)
         payment_id = payment['parentId']
         tries = 0
-        while tries < 240:
+        while tries < 600:
             res = self.call_eclair("getsentinfo", {'id': payment_id})
             if len(res) > 0 and res[0]['status']['type'] != 'pending':
                 return PayInvoiceResponse(res[0])
             time.sleep(1)
             tries = tries + 1
-        raise Exception('Cannot get sent info: too many tries')
+        raise Exception(f"Cannot get sent info: too many tries ({tries}): {payment}")
 
     def decode_payment_request(self, payment_request):
         params = {
@@ -284,12 +288,14 @@ class Eclair:
         return Audit(self.call_eclair("audit", {'from': frm, 'to': to}))
 
     @lru_cache(maxsize=None)
-    def get_channels(self, active_only=True):
+    def get_channels(self, active_only=True, public_only=True):
         json = self.call_eclair("channels")
         if active_only:
             filtered = [Channel(ch) for ch in json if ch["state"] == "NORMAL"]
         else:
             filtered = [Channel(ch) for ch in json]
+        if public_only:
+            filtered = [ch for ch in filtered if ch.public]
         return sorted(filtered, key=lambda ch: ch.chan_id)
 
     def get_channel(self, channel_id):
@@ -400,7 +406,8 @@ class Eclair:
         return routes
 
     def local_channel_ids(self):
-        local_channels = [chan for chan in self.get_channels(active_only=False) if chan.state != "CLOSING"]
+        local_channels = [chan for chan in self.get_channels(active_only=False) if
+                          chan.state != "CLOSING" and chan.state != "OFFLINE"]
         ids = [chan.chan_id for chan in local_channels]
         return ids
 
@@ -440,7 +447,8 @@ class Eclair:
                 found_route = found_routes['routes'][0]
                 hops = [self.route_to_hop(hop, amount_msat) for hop in found_route['hops']]
                 if hops[0].chan_id != first_hop_channel.chan_id:
-                    raise EclairRPCException('Route starts with unexpected channel: ' + hops[0].chan_id)
+                    # raise EclairRPCException('Route starts with unexpected channel: ' + hops[0].chan_id)
+                    return []
                 if last_hop_channel:
                     hops.append(last_hop_channel.to_hop(amount_msat, last_hop_fee, first=False))
                 routes.append(Route(amount_msat, hops))
@@ -453,7 +461,7 @@ class Eclair:
 
     @staticmethod
     def route_to_hop(hop, amt_to_forward_msat):
-        last_update = hop['lastUpdate']
+        last_update = hop['source']['channelUpdate']
         fee_rate_milli_msat = last_update['feeProportionalMillionths']
         fee_base_msat = last_update['feeBaseMsat']
         fee_msat = int(amt_to_forward_msat / 1_000_000 * fee_rate_milli_msat + fee_base_msat)
