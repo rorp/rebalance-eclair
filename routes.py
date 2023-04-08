@@ -97,6 +97,14 @@ class Routes:
                 )
                 return
 
+    def ignore_channel_on_route_eclair(self, chan_id, route):
+        previous_pubkey = self.lnd.get_own_pubkey()
+        for hop in route.hops:
+            if hop.chan_id == chan_id:
+                self.ignore_edge_from_to(hop.chan_id, previous_pubkey, hop.pub_key)
+                return
+            previous_pubkey = hop.pub_key
+
     def ignore_hop_on_route(self, hop_to_ignore, route):
         previous_pubkey = self.lnd.get_own_pubkey()
         for hop in route.hops:

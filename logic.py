@@ -88,7 +88,7 @@ class Logic:
         while routes.has_next():
             route = routes.get_next()
 
-            success = self.try_route(payment_request, route, routes, tried_routes)
+            success = self.try_route(payment_request, route, routes, tried_routes, fee_limit_msat)
             if success:
                 return True
         self.output.print_line("Could not find any suitable route")
@@ -139,7 +139,7 @@ class Logic:
 
         return fee_limit_msat
 
-    def try_route(self, payment_request, route, routes, tried_routes):
+    def try_route(self, payment_request, route, routes, tried_routes, fee_limit_msat):
         if self.route_is_invalid(route, routes):
             return False
 
@@ -156,7 +156,7 @@ class Logic:
         if self.dry_run:
             is_successful = True
         else:
-            response = self.lnd.send_payment(payment_request, route)
+            response = self.lnd.send_payment(payment_request, route, fee_limit_msat)
             is_successful = response.failure.code == 0
         if is_successful:
             self.print_success_statistics(route, route_ppm)
@@ -235,6 +235,15 @@ class Logic:
             self.output.print_line(format_warning(response.failure.error_message()))
             if response.failed_node:
                 routes.ignore_edge_on_route_eclair(response.failed_node, route)
+            elif response.failed_channel:
+                routes.ignore_channel_on_route_eclair(response.failed_channel, route)
+            elif len(response.hops) > 2:
+                failed_hop = response.hops[1]
+                for i in range(2, len(response.hops) - 1):
+                    hop = response.hops[i]
+                    if hop['fee'] > failed_hop['fee']:
+                        failed_hop = hop
+                routes.ignore_channel_on_route_eclair(failed_hop['channel'], route)
         else:
             self.output.print_line(format_error(f"Unknown error code {repr(code)}:"))
             self.output.print_line(format_error(repr(response)))
@@ -305,6 +314,7 @@ class Logic:
         return first_hop.chan_id == last_hop.chan_id
 
     def fees_too_high(self, route, routes):
+        return False
         policy_first_hop = self.lnd.get_policy_to(route.hops[0].chan_id)
         amount_msat = route.total_amt_msat
         missed_fee_msat = self.compute_fee(

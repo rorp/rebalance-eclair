@@ -46,9 +46,23 @@ class PayInvoiceResponse:
         self.failures = []
         self.failed_node = None
         self.failed_channel = None
+        self.hops = []
         if 'failures' in status:
             self.failures = status['failures']
+            error_messages = [j['failureMessage'] for j in self.failures]
             for f in self.failures:
+                if f['failureMessage'].find('was above the maximum allowed fee') > 0:
+                    parts = f['failureMessage'].split(', route: ')
+                    if len(parts) == 2:
+                        error_messages = [parts[0]]
+                        for h in parts[1].split('->'):
+                            hparts = h.split(':')
+                            if len(hparts) == 2:
+                                hop = {
+                                    'channel': hparts[0],
+                                    'fee': int(hparts[1])
+                                }
+                                self.hops.append(hop)
                 if self.failed_node is None:
                     if 'failedNode' in f:
                         self.failed_node = f['failedNode']
@@ -56,9 +70,9 @@ class PayInvoiceResponse:
                         if self.failed_node == hop['nodeId']:
                             self.failed_channel = hop['shortChannelId']
                             break
-            self.failure = Failure(-1, [j['failureMessage'] for j in self.failures])
+            self.failure = Failure(-1, error_messages)
         else:
-            self.failure = Failure(0, '')
+            self.failure = Failure(0, [])
 
 
 class ChannelDesc:
@@ -231,6 +245,8 @@ class Eclair:
         res = []
         for peer_json in json:
             node_json = self.get_node_info(peer_json['nodeId'])
+            if len(node_json) == 0:
+                node_json = [{'alias': peer_json['nodeId']}]
             res.append(Peer(peer_json, node_json[0]))
         return res
 
@@ -259,12 +275,13 @@ class Eclair:
     def cancel_invoice(self, payment_hash):
         return self.call_eclair("deleteinvoice", {'paymentHash': payment_hash})
 
-    def send_payment(self, payment_request, route):
+    def send_payment(self, payment_request, route, fee_limit_msat):
         params = {
             'shortChannelIds': ",".join([hop.chan_id for hop in route.hops]),
             'amountMsat': payment_request.num_msat,
             'invoice': payment_request.serialized,
             'finalCltvExpiry': payment_request.cltv_expiry,
+            'maxFeeMsat': int(fee_limit_msat),
         }
         payment = self.call_eclair("sendtoroute", params)
         payment_id = payment['parentId']
