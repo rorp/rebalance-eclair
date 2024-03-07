@@ -1,6 +1,6 @@
-# rebalance-lnd
+# rebalance-eclair
 
-Using this script you can easily rebalance individual channels of your `lnd` node by
+Using this script you can easily rebalance individual channels of your `eclair` or `lnd` node by
 sending funds out one channel, through the lightning network, back to yourself.
 
 This script helps you move funds between your channels so that you can increase the outbound liquidity in one channel,
