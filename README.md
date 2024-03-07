@@ -25,7 +25,7 @@ There are several options for installing rebalance-eclair.
 
 ### Eclair
 
-This script needs an active `Eclair` (tested with v0.8.0, https://github.com/ACINQ/eclair) instance running.
+This script needs an active `Eclair` (tested with v0.10.0, https://github.com/ACINQ/eclair) instance running.
 
 To allow the script to connect to your `Eclair` instance use `--eclairapi`   and `--eclairpassword` arguments.
 Alternatively, You need read permissions for the `Eclair` config file to read the API address and the API password from 

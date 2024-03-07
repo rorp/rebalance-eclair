@@ -106,10 +106,10 @@ class Channel:
     def __init__(self, json):
         data = json['data']
         commitments = data['commitments']
-        self.public = commitments['channelFlags']['announceChannel']
-        local_params = commitments['localParams']
-        remote_params = commitments['remoteParams']
-        local_commit = commitments['localCommit']
+        self.public = commitments['params']['channelFlags']['announceChannel']
+        local_params = commitments['params']['localParams']
+        remote_params = commitments['params']['remoteParams']
+        local_commit = commitments['active'][0]['localCommit']
         to_local = local_commit['spec']['toLocal']
         to_remote = local_commit['spec']['toRemote']
 
@@ -119,12 +119,12 @@ class Channel:
         self.state = json["state"]
 
         self.local_balance = int(to_local / 1000)
-        self.local_chan_reserve_sat = local_params['requestedChannelReserve_opt']
+        self.local_chan_reserve_sat = local_params['initialRequestedChannelReserve_opt']
         self.remote_balance = int(to_remote / 1000)
-        self.remote_chan_reserve_sat = remote_params['requestedChannelReserve_opt']
+        self.remote_chan_reserve_sat = remote_params['initialRequestedChannelReserve_opt']
         self.capacity = self.local_balance + self.remote_balance
 
-        self.chan_point = commitments['commitInput']['outPoint']
+        self.chan_point = commitments['active'][0]['fundingTx']['outPoint']
         self.channel_point = self.chan_point
 
         self.channel_update = None
@@ -264,6 +264,17 @@ class Eclair:
                     return update
             return None
 
+    @lru_cache(maxsize=None)
+    def get_nodes(self, pub_keys=[]):
+        params = {}
+        for pub_key in pub_keys:
+            if 'nodeIds' in params:
+                params['nodeIds'] = params['nodeIds'] + "," + pub_key
+            else:
+                params['nodeIds'] = pub_key
+        res = self.call_eclair("nodes")
+        return res
+
     def generate_invoice(self, memo, amount):
         params = {
             "description": memo,
@@ -320,6 +331,12 @@ class Eclair:
             if ch.chan_id == channel_id:
                 return ch
         return None
+
+    @lru_cache(maxsize=None)
+    def get_closed_channels(self):
+        json = self.call_eclair("closedchannels")
+        filtered = [Channel(ch) for ch in json]
+        return sorted(filtered, key=lambda ch: ch.chan_id)
 
     @lru_cache(maxsize=None)
     def get_edges(self):
