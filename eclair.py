@@ -117,11 +117,17 @@ class Channel:
         self.local_pubkey = local_params['nodeId']
         self.channel_id = json['channelId']
         self.state = json["state"]
-
+        
         self.local_balance = int(to_local / 1000)
-        self.local_chan_reserve_sat = local_params['initialRequestedChannelReserve_opt']
+        if 'initialRequestedChannelReserve_opt' in local_params:
+            self.local_chan_reserve_sat = local_params['initialRequestedChannelReserve_opt']
+        else:
+            self.local_chan_reserve_sat = 0
         self.remote_balance = int(to_remote / 1000)
-        self.remote_chan_reserve_sat = remote_params['initialRequestedChannelReserve_opt']
+        if 'initialRequestedChannelReserve_opt' in remote_params:
+            self.remote_chan_reserve_sat = remote_params['initialRequestedChannelReserve_opt']
+        else:
+            self.remote_chan_reserve_sat = 0
         self.capacity = self.local_balance + self.remote_balance
 
         self.chan_point = commitments['active'][0]['fundingTx']['outPoint']
