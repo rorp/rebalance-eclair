@@ -220,12 +220,14 @@ class Rebalance:
             sys.exit(0)
 
         if self.first_hop_channel_id == -1 or self.first_hop_channel_id == '-1':
-            self.first_hop_channel = random.choice(self.get_first_hop_candidates())
+            candidates = [ch for ch in self.get_first_hop_candidates() if self.arguments.exclude is None or ch.chan_id not in self.arguments.exclude]
+            self.first_hop_channel = random.choice(candidates)
         else:
             self.first_hop_channel = self.get_channel_for_channel_id(self.first_hop_channel_id)
 
         if self.last_hop_channel_id == -1 or self.last_hop_channel_id == '-1':
-            self.last_hop_channel = random.choice(self.get_last_hop_candidates())
+            candidates = [ch for ch in self.get_last_hop_candidates() if self.arguments.exclude is None or ch.chan_id not in self.arguments.exclude]
+            self.last_hop_channel = random.choice(candidates)
         else:
             self.last_hop_channel = self.get_channel_for_channel_id(self.last_hop_channel_id)
 
