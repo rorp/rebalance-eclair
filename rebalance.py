@@ -13,7 +13,7 @@ from eclair import Eclair
 from lnd import Lnd
 from logic import Logic
 from output import Output, format_alias, format_ppm, format_amount, format_amount_green, format_boring_string, \
-    print_bar, format_channel_id, format_error
+    print_bar, format_channel_id, format_error, format_earning
 from pyhocon import ConfigFactory
 
 MAX_SATOSHIS_PER_TRANSACTION = 4294967
@@ -172,18 +172,27 @@ class Rebalance:
             )
         own_ppm = self.lnd.get_ppm_to(channel.chan_id)
         remote_ppm = self.lnd.get_ppm_from(channel.chan_id)
+        own_inbound_ppm = self.lnd.get_inbound_ppm_to(channel.chan_id)
+        remote_inbound_ppm = self.lnd.get_inbound_ppm_from(channel.chan_id)
+        own_min_htlc = self.lnd.get_min_htlc_to(channel.chan_id)
+        remote_min_htlc = self.lnd.get_min_htlc_from(channel.chan_id)
+        own_max_htlc = self.lnd.get_max_htlc_to(channel.chan_id)
+        remote_max_htlc = self.lnd.get_max_htlc_from(channel.chan_id)
         print(f"Channel ID:       {format_channel_id(channel.chan_id)}")
         if hasattr(channel, "channel_id"):
-            print(f"                  {format_boring_string(channel.channel_id)}")
-        print(f"Alias:            {format_alias(self.lnd.get_node_alias(channel.remote_pubkey))}")
-        print(f"Pubkey:           {format_boring_string(channel.remote_pubkey)}")
-        print(f"Channel Point:    {format_boring_string(channel.channel_point)}")
-        print(f"Local ratio:      {get_local_ratio(channel):.3f}")
-        print(f"Fee rates:        {format_ppm(own_ppm)} (own), {format_ppm(remote_ppm)} (peer)")
-        print(f"Capacity:         {channel.capacity:10,}")
-        print(f"Remote available: {format_amount(get_remote_available(channel), 10)}")
-        print(f"Local available:  {format_amount_green(get_local_available(channel), 10)}")
-        print(f"Rebalance amount: {rebalance_amount_formatted}")
+            print(f"                   {format_boring_string(channel.channel_id)}")
+        print(f"Alias:             {format_alias(self.lnd.get_node_alias(channel.remote_pubkey))}")
+        print(f"Pubkey:            {format_boring_string(channel.remote_pubkey)}")
+        print(f"Channel Point:     {format_boring_string(channel.channel_point)}")
+        print(f"Local ratio:       {get_local_ratio(channel):.3f}")
+        print(f"Fee rates:         {format_ppm(own_ppm)} (own), {format_ppm(remote_ppm)} (peer)")
+        print(f"Inbound fee rates: {format_ppm(own_inbound_ppm)} (own), {format_ppm(remote_inbound_ppm)} (peer)")
+        print(f"HTLC minimum       {format_earning(own_min_htlc)} (own), {format_earning(remote_min_htlc)} (peer)")
+        print(f"HTLC maximum       {format_earning(own_max_htlc)} (own), {format_earning(remote_max_htlc)} (peer)")
+        print(f"Capacity:          {channel.capacity:10,}")
+        print(f"Remote available:  {format_amount(get_remote_available(channel), 10)}")
+        print(f"Local available:   {format_amount_green(get_local_available(channel), 10)}")
+        print(f"Rebalance amount:  {rebalance_amount_formatted}")
         print(get_capacity_and_ratio_bar(channel, self.lnd.get_max_channel_capacity()))
         print("")
 

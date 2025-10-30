@@ -51,6 +51,10 @@ class PayInvoiceResponse:
             self.failures = status['failures']
             error_messages = [j['failureMessage'] for j in self.failures]
             for f in self.failures:
+                if f['failureMessage'] == 'could not decrypt failure onion' and len(f['failedRoute']) > 2:
+                    hop = f['failedRoute'][1]
+                    self.failed_node = hop['nextNodeId']
+                    self.failed_channel = hop['shortChannelId']
                 if f['failureMessage'].find('was above the maximum allowed fee') > 0:
                     parts = f['failureMessage'].split(', route: ')
                     if len(parts) == 2:
@@ -98,56 +102,78 @@ class RoutingPolicy:
         self.fee_base_msat = json['feeBaseMsat']
         self.fee_rate_milli_msat = json['feeProportionalMillionths']
         self.disabled = not json['channelFlags']['isEnabled']
-        self.max_htlc_msat = json['htlcMaximumMsat']
+        self.max_htlc = json['htlcMaximumMsat']
         self.last_update = json['timestamp']
+        self.inbound_fee_base_msat = None
+        self.inbound_fee_rate_milli_msat = None
+        if 'tlvStream' in json:
+            tlv_stream = json['tlvStream']
+            if 'Blip18InboundFee' in tlv_stream:
+                inbound_fee = tlv_stream['Blip18InboundFee']
+                self.inbound_fee_base_msat = inbound_fee['feeBase']
+                self.inbound_fee_rate_milli_msat = inbound_fee['feeProportionalMillionths']
 
 
 class Channel:
     def __init__(self, json):
-        data = json['data']
-        commitments = data['commitments']
-        self.public = commitments['params']['channelFlags']['announceChannel']
-        local_params = commitments['params']['localParams']
-        remote_params = commitments['params']['remoteParams']
-        local_commit = commitments['active'][0]['localCommit']
-        to_local = local_commit['spec']['toLocal']
-        to_remote = local_commit['spec']['toRemote']
+        if 'data' in json:
+            data = json['data']
+            commitments = data['commitments']
+            self.public = commitments['channelParams']['channelFlags']['announceChannel']
+            local_params = commitments['channelParams']['localParams']
+            remote_params = commitments['channelParams']['remoteParams']
+            local_commit = commitments['active'][0]['localCommit']
+            to_local = local_commit['spec']['toLocal']
+            to_remote = local_commit['spec']['toRemote']
+            self.remote_pubkey = json['nodeId']
+            self.local_pubkey = local_params['nodeId']
+            self.channel_id = json['channelId']
+            self.state = json["state"]
+            if 'initialRequestedChannelReserve_opt' in local_params:
+                self.local_chan_reserve_sat = local_params['initialRequestedChannelReserve_opt']
+            else:
+                self.local_chan_reserve_sat = 0
+            if 'initialRequestedChannelReserve_opt' in remote_params:
+                self.remote_chan_reserve_sat = remote_params['initialRequestedChannelReserve_opt']
+            else:
+                self.remote_chan_reserve_sat = 0
 
-        self.remote_pubkey = json['nodeId']
-        self.local_pubkey = local_params['nodeId']
-        self.channel_id = json['channelId']
-        self.state = json["state"]
-        
+            self.chan_point = commitments['active'][0]['fundingInput']
+
+            self.channel_point = self.chan_point
+            self.channel_update = None
+            self.chan_id = self.channel_id
+            if 'channelUpdate' in data:
+                channel_update = data['channelUpdate']
+                self.chan_id = channel_update['shortChannelId']
+                self.fee_base_msat = channel_update['feeBaseMsat']
+                self.fee_rate_milli_msat = channel_update['feeProportionalMillionths']
+
+                if channel_update['channelFlags']['isNode1']:
+                    self.node1_pub = self.local_pubkey
+                    self.node2_pub = self.remote_pubkey
+                else:
+                    self.node1_pub = self.remote_pubkey
+                    self.node2_pub = self.local_pubkey
+                self.channel_update = channel_update
+
+        else:
+            to_local = json['localBalance']
+            to_remote = json['remoteBalance']
+            self.remote_pubkey = json['remoteNodeId']
+            #self.local_pubkey = local_params['nodeId']
+            self.channel_id = json['channelId']
+            self.chan_id = self.channel_id
+            self.state = None
+            self.channel_update = None
+            fundingTxId = json['fundingTxId']
+            fundingTxIndex = json['fundingTxIndex']
+
+
         self.local_balance = int(to_local / 1000)
-        if 'initialRequestedChannelReserve_opt' in local_params:
-            self.local_chan_reserve_sat = local_params['initialRequestedChannelReserve_opt']
-        else:
-            self.local_chan_reserve_sat = 0
         self.remote_balance = int(to_remote / 1000)
-        if 'initialRequestedChannelReserve_opt' in remote_params:
-            self.remote_chan_reserve_sat = remote_params['initialRequestedChannelReserve_opt']
-        else:
-            self.remote_chan_reserve_sat = 0
         self.capacity = self.local_balance + self.remote_balance
 
-        self.chan_point = commitments['active'][0]['fundingTx']['outPoint']
-        self.channel_point = self.chan_point
-
-        self.channel_update = None
-        self.chan_id = self.channel_id
-        if 'channelUpdate' in data:
-            channel_update = data['channelUpdate']
-            self.chan_id = channel_update['shortChannelId']
-            self.fee_base_msat = channel_update['feeBaseMsat']
-            self.fee_rate_milli_msat = channel_update['feeProportionalMillionths']
-
-            if channel_update['channelFlags']['isNode1']:
-                self.node1_pub = self.local_pubkey
-                self.node2_pub = self.remote_pubkey
-            else:
-                self.node1_pub = self.remote_pubkey
-                self.node2_pub = self.local_pubkey
-            self.channel_update = channel_update
 
     def __repr__(self):
         return f"{self.chan_id}:{self.node1_pub}:{self.node2_pub}:{self.state}:{self.public}"
@@ -394,6 +420,33 @@ class Eclair:
         policy = self.get_policy_from(channel_id)
         if policy:
             return policy.fee_rate_milli_msat
+        return None
+
+    def get_inbound_ppm_to(self, channel_id):
+        return self.get_policy_to(channel_id).inbound_fee_rate_milli_msat
+
+    def get_inbound_ppm_from(self, channel_id):
+        policy = self.get_policy_from(channel_id)
+        if policy:
+            return policy.inbound_fee_rate_milli_msat
+        return None
+
+    def get_min_htlc_to(self, channel_id):
+        return self.get_policy_to(channel_id).min_htlc
+
+    def get_min_htlc_from(self, channel_id):
+        policy = self.get_policy_from(channel_id)
+        if policy:
+            return policy.min_htlc
+        return None
+
+    def get_max_htlc_to(self, channel_id):
+        return self.get_policy_to(channel_id).max_htlc
+
+    def get_max_htlc_from(self, channel_id):
+        policy = self.get_policy_from(channel_id)
+        if policy:
+            return policy.max_htlc
         return None
 
     @lru_cache(maxsize=None)

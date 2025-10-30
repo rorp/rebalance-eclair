@@ -109,7 +109,7 @@ def sort_by_received_timestamp(pair):
     rcvd = pair[1]
     return received_timestamp(rcvd)[0]
 
-from_ts = int(time.time()) - 60 * 60 * 24 * 31
+from_ts = int(time.time()) - 60 * 60 * 24 * 31 * 4
 if len(sys.argv) == 2:
     from_ts = int(sys.argv[1])
 
@@ -181,10 +181,10 @@ for pair in rebalanced:
 print(f"{'=' * 71} Relayed {'=' * 78}")
 
 for r in audit.relayed:
-    started_ts = r['startedAt']['iso'].ljust(25)
+    started_ts = r['receivedAt']['iso'].ljust(25)
     settled_ts = r['settledAt']['iso'].ljust(25)
     ts = started_ts
-    latency = r['settledAt']['unix'] - r['startedAt']['unix']
+    latency = r['settledAt']['unix'] - r['receivedAt']['unix']
     amount = r['amountOut']
     fee = r['amountIn'] - r['amountOut']
     from_ch = r['fromChannelId']
