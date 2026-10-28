@@ -88,6 +88,8 @@ def format_fee_sat(fee_sat):
 
 
 def format_earning(msat, min_width=None):
+    if msat is None:
+        return chalk.green(f"N/A mSAT")
     if min_width:
         return chalk.green(f"{msat:{min_width},} mSAT")
     return chalk.green(f"{msat:,} mSAT")

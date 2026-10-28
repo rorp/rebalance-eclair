@@ -8,7 +8,7 @@ from lnd import Lnd
 
 DEFAULT_BASE_FEE_SAT_MSAT = 1_000
 DEFAULT_FEE_RATE_MSAT = 0.001
-MAX_FEE_RATE = 2_000
+MAX_FEE_RATE = 5_000
 
 
 class Logic:

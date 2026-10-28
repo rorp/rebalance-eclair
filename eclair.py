@@ -51,10 +51,10 @@ class PayInvoiceResponse:
             self.failures = status['failures']
             error_messages = [j['failureMessage'] for j in self.failures]
             for f in self.failures:
-                if f['failureMessage'] == 'could not decrypt failure onion' and len(f['failedRoute']) > 2:
-                    hop = f['failedRoute'][1]
-                    self.failed_node = hop['nextNodeId']
-                    self.failed_channel = hop['shortChannelId']
+                #if f['failureMessage'] == 'could not decrypt failure onion' and len(f['failedRoute']) > 2:
+                #    hop = f['failedRoute'][1]
+                #    self.failed_node = hop['nextNodeId']
+                #    self.failed_channel = hop['shortChannelId']
                 if f['failureMessage'].find('was above the maximum allowed fee') > 0:
                     parts = f['failureMessage'].split(', route: ')
                     if len(parts) == 2:
@@ -527,6 +527,7 @@ class Eclair:
             'targetNodeId': last_hop_pubkey,
             'amountMsat': int(amount * 1000),
             'format': 'full',
+            'routeAddrType': 'clearnet',
             'ignoreNodeIds': self.empty_to_none(",".join(ignore_node_ids)),
             'ignoreShortChannelIds': self.empty_to_none(",".join(ignore_channels)),
             'maxFeeMsat': fee_limit,

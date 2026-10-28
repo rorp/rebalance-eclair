@@ -28,8 +28,8 @@ def received_timestamp(received):
     max_timestamp = 0
     max_iso = ''
     for part in received['parts']:
-        unix = part['timestamp']['unix']
-        iso = part['timestamp']['iso']
+        unix = part['receivedAt']['unix']
+        iso = part['receivedAt']['iso']
         if unix > max_timestamp:
             max_timestamp = unix
             max_iso = iso
@@ -48,7 +48,7 @@ def received_channel_id(received):
     for part in received['parts']:
         if not ch is None and ch != part['fromChannelId']:
             raise Exception('multipart payment')
-        ch = part['fromChannelId']
+        ch = part['channelId']
     return ch
 
 
@@ -56,8 +56,8 @@ def sent_timestamp(sent):
     min_timestamp = 9999999999
     min_iso = ''
     for part in sent['parts']:
-        unix = part['timestamp']['unix']
-        iso = part['timestamp']['iso']
+        unix = part['startedAt']['unix']
+        iso = part['startedAt']['iso']
         if unix < min_timestamp:
             min_timestamp = unix
             min_iso = iso
@@ -67,14 +67,14 @@ def sent_timestamp(sent):
 def sent_amount(sent):
     amount = 0
     for part in sent['parts']:
-        amount = amount + part['amount']
+        amount = amount + part['amountWithFees']
     return amount
 
 
 def sent_fees(sent):
     fees = 0
     for part in sent['parts']:
-        fees = fees + part['feesPaid']
+        fees = fees + part['fees']
     return fees
 
 
@@ -83,7 +83,7 @@ def sent_channel_id(sent):
     for part in sent['parts']:
         if not ch is None and ch != part['toChannelId']:
             raise Exception('multipart payment')
-        ch = part['toChannelId']
+        ch = part['channelId']
     return ch
 
 all_aliases = {}
@@ -165,7 +165,10 @@ for pair in rebalanced:
     to_ch = sent_channel_id(sent)
     from_ch = received_channel_id(rcvd)
     from_node_id = node_ids.get(from_ch, from_ch)
-    to_node_id = node_ids.get(to_ch, to_ch)
+    if to_ch == '0000000000000000000000000000000000000000000000000000000000000000':
+        to_node_id = sent['parts'][0]['nextNodeId']
+    else:
+        to_node_id = node_ids.get(to_ch, to_ch)
     from_node = get_alias(aliases, channels, from_node_id, from_ch).ljust(32)
     to_node = get_alias(aliases, channels, to_node_id, to_ch).ljust(32)
     print(
@@ -181,14 +184,14 @@ for pair in rebalanced:
 print(f"{'=' * 71} Relayed {'=' * 78}")
 
 for r in audit.relayed:
-    started_ts = r['receivedAt']['iso'].ljust(25)
-    settled_ts = r['settledAt']['iso'].ljust(25)
+    started_ts = r['incoming'][0]['receivedAt']['iso'].ljust(25)
+    settled_ts = r['outgoing'][0]['settledAt']['iso'].ljust(25)
     ts = started_ts
-    latency = r['settledAt']['unix'] - r['receivedAt']['unix']
-    amount = r['amountOut']
-    fee = r['amountIn'] - r['amountOut']
-    from_ch = r['fromChannelId']
-    to_ch = r['toChannelId']
+    latency = r['outgoing'][0]['settledAt']['unix'] - r['incoming'][0]['receivedAt']['unix']
+    amount = r['outgoing'][0]['amount']
+    fee = r['incoming'][0]['amount'] - r['outgoing'][0]['amount']
+    from_ch = r['incoming'][0]['channelId']
+    to_ch = r['outgoing'][0]['channelId']
     from_node_id = node_ids.get(from_ch, from_ch)
     to_node_id = node_ids.get(to_ch, to_ch)
     from_node = get_alias(aliases, channels, from_node_id, from_ch).ljust(32)
