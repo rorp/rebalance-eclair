@@ -1,4 +1,6 @@
+import json
 import math
+import os
 
 import output
 from output import Output, format_alias, format_fee_msat, format_ppm, format_amount, \
@@ -26,7 +28,8 @@ class Logic:
             min_remote,
             output: Output,
             reckless,
-            dry_run
+            dry_run,
+            route_file=None
     ):
         self.lnd = lnd
         self.first_hop_channel = first_hop_channel
@@ -41,6 +44,7 @@ class Logic:
         self.output = output
         self.reckless = reckless
         self.dry_run = dry_run
+        self.route_file = route_file
         if not self.fee_factor:
             self.fee_factor = 1.0
 
@@ -85,15 +89,59 @@ class Logic:
         self.initialize_ignored_channels(routes, fee_limit_msat, min_fee_last_hop)
 
         tried_routes = []
+        saved_route = self.load_saved_route()
+        if saved_route:
+            self.output.print_line("")
+            self.output.print_line(f"Trying saved route from {self.route_file}")
+            if self.try_route(payment_request, saved_route, routes, tried_routes, fee_limit_msat):
+                self.save_route(saved_route)
+                return True
+
         while routes.has_next():
             route = routes.get_next()
 
             success = self.try_route(payment_request, route, routes, tried_routes, fee_limit_msat)
             if success:
+                self.save_route(route)
                 return True
         self.output.print_line("Could not find any suitable route")
         self.lnd.cancel_invoice(payment_request.payment_hash)
         return False
+
+    def load_saved_route(self):
+        if not self.route_file or not os.path.exists(self.route_file):
+            return None
+        try:
+            with open(self.route_file) as f:
+                saved_hops = json.load(f)['hops']
+        except Exception as e:
+            self.output.print_line(format_warning(f"Unable to read saved route from {self.route_file}: {e}"))
+            return None
+        if len(saved_hops) < 2:
+            return None
+        chan_ids = [hop['chan_id'] for hop in saved_hops]
+        if self.first_hop_channel and chan_ids[0] != self.first_hop_channel.chan_id:
+            return None
+        if self.last_hop_channel and chan_ids[-1] != self.last_hop_channel.chan_id:
+            return None
+        if any(chan_id in self.excluded for chan_id in chan_ids):
+            return None
+        route = self.lnd.build_route(self.amount, saved_hops)
+        if route is None:
+            self.output.print_line(format_warning(f"Saved route from {self.route_file} is no longer available"))
+        return route
+
+    def save_route(self, route):
+        if not self.route_file or self.dry_run:
+            return
+        saved_hops = [
+            {'source_pub_key': hop.source_pub_key, 'pub_key': hop.pub_key, 'chan_id': hop.chan_id}
+            for hop in route.hops
+        ]
+        tmp_file = f"{self.route_file}.tmp"
+        with open(tmp_file, "w") as f:
+            json.dump({'hops': saved_hops}, f, indent=2)
+        os.replace(tmp_file, self.route_file)
 
     def get_fee_limit_msat(self):
         fee_limit_msat = None
