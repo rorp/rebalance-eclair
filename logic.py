@@ -29,7 +29,8 @@ class Logic:
             output: Output,
             reckless,
             dry_run,
-            route_file=None
+            route_file=None,
+            ignore_file=None
     ):
         self.lnd = lnd
         self.first_hop_channel = first_hop_channel
@@ -45,6 +46,8 @@ class Logic:
         self.reckless = reckless
         self.dry_run = dry_run
         self.route_file = route_file
+        self.ignore_file = ignore_file
+        self.failed_channels = []
         if not self.fee_factor:
             self.fee_factor = 1.0
 
@@ -87,6 +90,7 @@ class Logic:
         )
 
         self.initialize_ignored_channels(routes, fee_limit_msat, min_fee_last_hop)
+        self.load_failed_channels(routes)
 
         tried_routes = []
         saved_route = self.load_saved_route()
@@ -95,6 +99,7 @@ class Logic:
             self.output.print_line(f"Trying saved route from {self.route_file}")
             if self.try_route(payment_request, saved_route, routes, tried_routes, fee_limit_msat):
                 self.save_route(saved_route)
+                self.forget_failed_channels(saved_route)
                 return True
 
         while routes.has_next():
@@ -103,6 +108,7 @@ class Logic:
             success = self.try_route(payment_request, route, routes, tried_routes, fee_limit_msat)
             if success:
                 self.save_route(route)
+                self.forget_failed_channels(route)
                 return True
         self.output.print_line("Could not find any suitable route")
         self.lnd.cancel_invoice(payment_request.payment_hash)
@@ -126,6 +132,8 @@ class Logic:
             return None
         if any(chan_id in self.excluded for chan_id in chan_ids):
             return None
+        if any(chan_id in self.failed_channels for chan_id in chan_ids[1:-1]):
+            return None
         route = self.lnd.build_route(self.amount, saved_hops)
         if route is None:
             self.output.print_line(format_warning(f"Saved route from {self.route_file} is no longer available"))
@@ -142,6 +150,42 @@ class Logic:
         with open(tmp_file, "w") as f:
             json.dump({'hops': saved_hops}, f, indent=2)
         os.replace(tmp_file, self.route_file)
+
+    def load_failed_channels(self, routes):
+        if not self.ignore_file or not os.path.exists(self.ignore_file):
+            return
+        try:
+            with open(self.ignore_file) as f:
+                self.failed_channels = json.load(f)['channels']
+        except Exception as e:
+            self.output.print_line(format_warning(f"Unable to read failed channels from {self.ignore_file}: {e}"))
+            return
+        own_channel_ids = [ch.chan_id for ch in (self.first_hop_channel, self.last_hop_channel) if ch]
+        to_ignore = [chan_id for chan_id in self.failed_channels if chan_id not in own_channel_ids]
+        if to_ignore:
+            self.output.print_line(f"Ignoring {len(to_ignore)} previously failed channel(s) from {self.ignore_file}")
+        for chan_id in to_ignore:
+            routes.ignore_edge_from_to(chan_id, None, None, show_message=False)
+
+    def remember_failed_channels(self, ignored_pairs):
+        new_channels = [p['chan_id'] for p in ignored_pairs if p['chan_id'] not in self.failed_channels]
+        if new_channels:
+            self.failed_channels.extend(new_channels)
+            self.save_failed_channels()
+
+    def forget_failed_channels(self, route):
+        route_channel_ids = [hop.chan_id for hop in route.hops]
+        if any(chan_id in self.failed_channels for chan_id in route_channel_ids):
+            self.failed_channels = [c for c in self.failed_channels if c not in route_channel_ids]
+            self.save_failed_channels()
+
+    def save_failed_channels(self):
+        if not self.ignore_file or self.dry_run:
+            return
+        tmp_file = f"{self.ignore_file}.tmp"
+        with open(tmp_file, "w") as f:
+            json.dump({'channels': self.failed_channels}, f, indent=2)
+        os.replace(tmp_file, self.ignore_file)
 
     def get_fee_limit_msat(self):
         fee_limit_msat = None
@@ -210,7 +254,9 @@ class Logic:
             self.print_success_statistics(route, route_ppm)
             return True
         else:
+            num_ignored_before = len(routes.ignored_pairs)
             self.handle_error(response, route, routes)
+            self.remember_failed_channels(routes.ignored_pairs[num_ignored_before:])
             return False
 
     def print_success_statistics(self, route, route_ppm):
