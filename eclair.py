@@ -548,6 +548,25 @@ class Eclair:
         except RouteNotFoundException:
             return []
 
+    def build_route(self, amount, saved_hops):
+        # rebuild a previously used route for the given amount, using current channel updates
+        amount_msat = int(amount * 1000)
+        hops = []
+        for saved_hop in saved_hops:
+            try:
+                channel_update = self.get_channel_update(saved_hop['source_pub_key'], saved_hop['chan_id'])
+            except Exception:
+                channel_update = None
+            if channel_update is None:
+                return None
+            hop = {
+                'nodeId': saved_hop['source_pub_key'],
+                'nextNodeId': saved_hop['pub_key'],
+                'source': {'channelUpdate': channel_update},
+            }
+            hops.append(self.route_to_hop(hop, amount_msat))
+        return Route(amount_msat, hops)
+
     def calc_fees_msat(self, amount_msat, chan_id):
         return int(self.get_policy_from(chan_id).fee_base_msat + amount_msat * self.get_ppm_from(chan_id) / 1_000_000)
 

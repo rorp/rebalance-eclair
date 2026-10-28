@@ -245,6 +245,22 @@ outbound liquidity to channels where you charge a lot, and taking those funds ou
 To protect you from making mistakes, in the fee computation (described below) the fee rate of the destination channel
 is capped at 2,000ppm (which corresponds to a 0.2% fee), even if the channel is configured with a higher fee rate.
 
+### Reusing the last successful route (Eclair only)
+
+With `--route-file FILE`, the route of each successful rebalance is saved to `FILE`.
+On the next run with the same `--route-file`, the saved route is tried first, using current channel fees and
+the new amount, before searching for other routes. If it fails, the normal route search continues.
+
+The saved route is only used if it fits the current run: its first channel must match `--from` and its last channel
+must match `--to` (if given), and it must not use any channel given with `--exclude`.
+Nothing is saved with `--dry-run`.
+
+```sh
+rebalance.py -t 22222222 --route-file ~/.rebalance-route.json
+```
+
+This option is not supported with lnd.
+
 ## Fees
 
 In order for the network to route your rebalance transaction, you have to pay fees.
@@ -327,19 +343,28 @@ Please make sure to set realistic fee rates, which at best are already known to 
 
 ```sh
 usage: rebalance.py [-h] [--lnddir LNDDIR] [--network NETWORK] [--grpc GRPC]
-                    [-l] [--show-all | --show-only CHANNEL | -c] [-o | -i]
-                    [-f CHANNEL] [-t CHANNEL] [-A] [-a AMOUNT | -p PERCENTAGE]
+                    [--eclairdir ECLAIRDIR] [--eclairapi ECLAIRAPI]
+                    [--eclairpassword ECLAIRPASSWORD] [-l] [--show-all |
+                    --show-only CHANNEL | -c] [-o | -i] [-f CHANNEL]
+                    [-t CHANNEL] [-A] [-a AMOUNT | -p PERCENTAGE]
                     [--min-amount MIN_AMOUNT] [--min-local MIN_LOCAL]
                     [--min-remote MIN_REMOTE] [-e EXCLUDE] [--reckless]
-                    [--fee-factor FEE_FACTOR]
-                    [--fee-limit FEE_LIMIT | --fee-ppm-limit FEE_PPM_LIMIT]
+                    [--fee-factor FEE_FACTOR] [--fee-limit FEE_LIMIT |
+                    --fee-ppm-limit FEE_PPM_LIMIT] [--dry-run]
+                    [--route-file FILE]
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --lnddir LNDDIR       (default ~/.lnd) lnd directory
   --network NETWORK     (default mainnet) lnd network (mainnet, testnet,
                         simnet, ...)
   --grpc GRPC           (default localhost:10009) lnd gRPC endpoint
+  --eclairdir ECLAIRDIR
+                        (default ~/.eclair) Eclair directory
+  --eclairapi ECLAIRAPI
+                        Eclair API address
+  --eclairpassword ECLAIRPASSWORD
+                        Eclair API password
 
 list candidates:
   Show the unbalanced channels.
@@ -359,14 +384,12 @@ rebalance:
   Rebalance a channel. You need to specify at least the 'from' channel (-f)
   or the 'to' channel (-t).
 
-  -f CHANNEL, --from CHANNEL
-                        Channel ID of the outgoing channel (funds will be
+  -f, --from CHANNEL    Channel ID of the outgoing channel (funds will be
                         taken from this channel). You may also specify the ID
                         using the colon notation (12345:12:1), or the x
                         notation (12345x12x1). You may also use -1 to choose a
                         random candidate.
-  -t CHANNEL, --to CHANNEL
-                        Channel ID of the incoming channel (funds will be sent
+  -t, --to CHANNEL      Channel ID of the incoming channel (funds will be sent
                         to this channel). You may also specify the ID using
                         the colon notation (12345:12:1), or the x notation
                         (12345x12x1). You may also use -1 to choose a random
@@ -377,11 +400,10 @@ rebalance:
                         adjusted amount is below the --min-amount threshold.
                         As such, this switch can be used if you do NOT want to
                         rebalance if the channel is within the limits.
-  -a AMOUNT, --amount AMOUNT
-                        Amount of the rebalance, in satoshis. If not
+  -a, --amount AMOUNT   Amount of the rebalance, in satoshis. If not
                         specified, the amount computed for a perfect rebalance
                         will be used (up to the maximum of 4,294,967 satoshis)
-  -p PERCENTAGE, --percentage PERCENTAGE
+  -p, --percentage PERCENTAGE
                         Set the amount to a percentage of the computed amount.
                         As an example, if this is set to 50, half of the
                         computed amount will be used. See --amount.
@@ -394,7 +416,7 @@ rebalance:
   --min-remote MIN_REMOTE
                         (Default: 1,000,000) Ensure that the channels have at
                         least this amount as inbound liquidity.
-  -e EXCLUDE, --exclude EXCLUDE
+  -e, --exclude EXCLUDE
                         Exclude the given channel. Can be used multiple times.
   --reckless            Allow rebalance transactions that are not economically
                         viable. You might also want to set --min-local 0 and
@@ -416,6 +438,10 @@ rebalance:
                         If set, only consider rebalance transactions that cost
                         up to the given number of satoshis per 1M satoshis
                         sent.
+  --dry-run             Try to find a suitable route, but don't send any funds
+  --route-file FILE     (Eclair only) Save the latest successful route to this
+                        file and try it first on the next run, as long as it
+                        matches the given --from/--to channels.
 ```
 
 ## Contributing

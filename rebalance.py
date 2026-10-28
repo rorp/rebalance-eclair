@@ -26,6 +26,9 @@ class Rebalance:
             self.lnd = Eclair(eclair_conf, arguments.eclairapi, arguments.eclairpassword)
         else:
             self.lnd = Lnd(arguments.lnddir, arguments.grpc, arguments.network)
+        if arguments.route_file and not isinstance(self.lnd, Eclair):
+            print("--route-file is only supported with Eclair")
+            sys.exit(1)
         self.output = Output(self.lnd)
         self.min_amount = arguments.min_amount
         self.arguments = arguments
@@ -281,7 +284,8 @@ class Rebalance:
             self.min_remote,
             self.output,
             self.arguments.reckless,
-            self.arguments.dry_run
+            self.arguments.dry_run,
+            self.arguments.route_file
         ).rebalance()
 
     def get_first_hop_candidates(self):
@@ -534,6 +538,13 @@ def get_argument_parser():
         action="store_true",
         default=False,
         help="Try to find a suitable route, but don't send any funds"
+    )
+    rebalance_group.add_argument(
+        "--route-file",
+        type=str,
+        metavar="FILE",
+        help="(Eclair only) Save the latest successful route to this file and try it first on the next run, "
+             "as long as it matches the given --from/--to channels.",
     )
     return parser
 
