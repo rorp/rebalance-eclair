@@ -29,6 +29,9 @@ class Rebalance:
         if arguments.route_file and not isinstance(self.lnd, Eclair):
             print("--route-file is only supported with Eclair")
             sys.exit(1)
+        if arguments.ignore_file and not isinstance(self.lnd, Eclair):
+            print("--ignore-file is only supported with Eclair")
+            sys.exit(1)
         self.output = Output(self.lnd)
         self.min_amount = arguments.min_amount
         self.arguments = arguments
@@ -285,7 +288,8 @@ class Rebalance:
             self.output,
             self.arguments.reckless,
             self.arguments.dry_run,
-            self.arguments.route_file
+            self.arguments.route_file,
+            self.arguments.ignore_file
         ).rebalance()
 
     def get_first_hop_candidates(self):
@@ -545,6 +549,13 @@ def get_argument_parser():
         metavar="FILE",
         help="(Eclair only) Save the latest successful route to this file and try it first on the next run, "
              "as long as it matches the given --from/--to channels.",
+    )
+    rebalance_group.add_argument(
+        "--ignore-file",
+        type=str,
+        metavar="FILE",
+        help="(Eclair only) Save channels that caused payment failures to this file and ignore them on the next run. "
+             "Channels are removed from the file once they are part of a successful route.",
     )
     return parser
 

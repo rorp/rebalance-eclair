@@ -261,6 +261,20 @@ rebalance.py -t 22222222 --route-file ~/.rebalance-route.json
 
 This option is not supported with lnd.
 
+### Remembering failed channels (Eclair only)
+
+With `--ignore-file FILE`, channels that caused a payment attempt to fail are saved to `FILE`, and are ignored
+when searching for routes on the next run with the same `--ignore-file`.
+A channel is removed from the file again once it is part of a successful route.
+The channels given with `--from`/`--to` are never ignored this way, and nothing is saved with `--dry-run`.
+If `--route-file` is also used, a saved route that goes through a previously failed channel is skipped.
+
+```sh
+rebalance.py -t 22222222 --route-file ~/.rebalance-route.json --ignore-file ~/.rebalance-ignored.json
+```
+
+This option is not supported with lnd.
+
 ## Fees
 
 In order for the network to route your rebalance transaction, you have to pay fees.
@@ -442,6 +456,10 @@ rebalance:
   --route-file FILE     (Eclair only) Save the latest successful route to this
                         file and try it first on the next run, as long as it
                         matches the given --from/--to channels.
+  --ignore-file FILE    (Eclair only) Save channels that caused payment
+                        failures to this file and ignore them on the next run.
+                        Channels are removed from the file once they are part
+                        of a successful route.
 ```
 
 ## Contributing
